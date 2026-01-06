@@ -6,13 +6,17 @@ This document records all binding technical decisions. Agents must not deviate w
 
 | Decision | Value | Rationale |
 |----------|-------|-----------|
-| applicationId | `com.tribex.groovebox` | TBD - confirm before M0 |
+| applicationId | `com.tribex.groovebox` | Confirmed for M0 |
 | minSdk | 24 (Android 7.0) | Oboe AAudio support starts at API 26, but OpenSL ES fallback covers 24+ |
 | targetSdk | 34 | Current stable |
 | compileSdk | 34 | Match target |
 | NDK Version | `26.1.10909125` | LTS, tested with Oboe 1.8 |
 | ABIs | `arm64-v8a` | Start mono-ABI; add `armeabi-v7a` only if needed |
 | CMake Version | `3.22.1` | Bundled with Android Studio |
+| Android Gradle Plugin | `8.0.2` | Tested stable stack, compatibility fixes |
+| Kotlin | `1.8.22` | Matches AGP 8.0.2 |
+| Compose Compiler | `1.4.6` | Matches Kotlin 1.8.22 |
+| Gradle | `8.0` | Matches AGP 8.0.2 |
 
 ## Audio Configuration
 
