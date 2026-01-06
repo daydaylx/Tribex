@@ -35,3 +35,9 @@ Thumbs.db
 *.aiff
 *.flac
 *.mp3
+*.ogg
+
+# Build artifacts (APK/AAB)
+*.apk
+*.aab
+.bundle/
