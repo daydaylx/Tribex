@@ -1,10 +1,10 @@
 # TribeX (APK) – System Specification (v3.1)
-Version: 3.1 (FINAL)  
-Status: Frozen / Development Ready  
+Version: 3.1 (FINAL)
+Status: Frozen / Development Ready
 Platform: Android Native (Kotlin UI + C++ Audio Engine via Oboe)
 
 ## 0. Doktrin & Leitbild
-TribeX ist eine Groovebox, keine DAW.  
+TribeX ist eine Groovebox, keine DAW.
 Die Entwicklung folgt strikt diesen Regeln:
  * Immediacy over Complexity: Wenn ein Feature drei Klicks braucht, ist es falsch implementiert.
  * Hardware-Feel: Bedienung erfolgt über Muskelgedächtnis (Positionen), nicht über Lesen von Texten.
@@ -67,12 +67,14 @@ Das System besteht aus exakt 3 Screens. Keine Sub-Menüs.
 ## 4. Audio Engine Spezifikation
 ### 4.1 Die Render-Methode
 Es existiert eine zentrale Methode zur Audio-Erzeugung.
+```cpp
 void AudioEngine::render(float* outputBuffer, int32_t numFrames) {
     // 1. Events aus Lock-Free Queue holen
     // 2. Sequencer Step-Logik (Sample-Accurate)
     // 3. Voices summieren
     // 4. FX Chain (Send -> Master -> Valve -> Limiter)
 }
+```
 
  * Live: Oboe ruft render() im Callback.
  * Export: Background-Thread ruft render() in while-Loop.
@@ -147,4 +149,5 @@ Automatische Anpassung bei XRun-Erkennung (Buffer Underruns).
  * Atomic Write: DB wird in temporäre Datei geschrieben, dann atomar umbenannt.
  * Autosave: Bei Screen-Wechsel oder App-Pause.
 
+---
 End of Specification v3.1

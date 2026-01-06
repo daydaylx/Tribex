@@ -1,0 +1,37 @@
+# Gradle / Android build outputs
+**/build/
+.gradle/
+**/.gradle/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+**/.idea/
+
+# Local SDK/NDK paths (never commit)
+local.properties
+
+# Keystores / signing
+*.jks
+*.keystore
+keystore.properties
+
+# NDK / CMake intermediates (if generated)
+.cxx/
+**/.cxx/
+
+# Logs / temp
+*.log
+tmp/
+temp/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Large audio artifacts (avoid polluting context)
+*.wav
+*.aif
+*.aiff
+*.flac
+*.mp3
