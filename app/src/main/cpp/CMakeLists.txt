@@ -18,6 +18,13 @@ add_library(tribex_native SHARED
     SampleLoader.cpp
     WavetableSynth.cpp
     SynthPart.cpp
+    DelayEffect.cpp
+    ReverbEffect.cpp
+    ValveSaturation.cpp
+    Limiter.cpp
+    FXManager.cpp
+    WavWriter.cpp
+    OfflineRenderer.cpp
 )
 
 target_include_directories(tribex_native PRIVATE

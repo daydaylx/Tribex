@@ -17,8 +17,14 @@ AudioEngine::AudioEngine()
     , mPhase(0.0)
     , mSequencer()
     , mSampleCounter(0)
+    , mAnyPartSoloed(false)
     , mSampleParts{0, 1, 2, 3, 4, 5, 6, 7}  // Initialize 8 drum parts
 {
+    // M4.5: Zero all preallocated buffers
+    mPartLeftBuffer.fill(0.0f);
+    mPartRightBuffer.fill(0.0f);
+    mSynthLeftBuffer.fill(0.0f);
+    mSynthRightBuffer.fill(0.0f);
 }
 
 AudioEngine::~AudioEngine() {
@@ -266,14 +272,27 @@ void AudioEngine::setPartSolo(uint32_t partIndex, bool solo) {
         return;
     }
     
-    // M5: Apply to both drum parts and synth part
+    // M4.5: Apply to both drum parts and synth part
     if (partIndex < 8) {
         mSampleParts[partIndex].setSolo(solo);
     } else if (partIndex == 8) {
         mSynthPart.setSolo(solo);
     }
     
-    LOGI("Part %d soloed: %d", partIndex, solo);
+    // M4.5: Check if any part is soloed
+    bool anySoloed = false;
+    for (uint32_t i = 0; i < 8; i++) {
+        if (mSampleParts[i].isSoloed()) {
+            anySoloed = true;
+            break;
+        }
+    }
+    if (!anySoloed && mSynthPart.isSoloed()) {
+        anySoloed = true;
+    }
+    mAnyPartSoloed.store(anySoloed, std::memory_order_relaxed);
+    
+    LOGI("Part %d soloed: %d, any part soloed: %d", partIndex, solo, anySoloed);
 }
 
 // M5: Synth Part control methods (Part 8 only)
@@ -573,51 +592,80 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     if (format == oboe::AudioFormat::Float) {
         auto *outputBuffer = static_cast<float *>(audioData);
         
+        // M6: Preallocate buffers for FX chain (M4.5: no allocations!)
+        static constexpr int32_t MAX_FRAMES = 1024;
+        float leftOut[MAX_FRAMES];
+        float rightOut[MAX_FRAMES];
+        
         // Clear output buffers
-        for (int32_t i = 0; i < numFrames * numChannels; i++) {
-            outputBuffer[i] = 0.0f;
+        for (int32_t i = 0; i < numFrames; i++) {
+            leftOut[i] = 0.0f;
+            rightOut[i] = 0.0f;
         }
+        
+        // M4.5: Check if any part is soloed
+        bool anyPartSoloed = mAnyPartSoloed.load(std::memory_order_relaxed);
         
         // M5: Render all drum parts (0-7)
         for (uint32_t part = 0; part < 8; part++) {
-            if (mSampleParts[part].hasSample()) {
-                // Render to temporary buffers then sum
-                // Note: This is a simple approach, could be optimized
-                float leftBuffer[numFrames];
-                float rightBuffer[numFrames];
-                
-                for (int32_t i = 0; i < numFrames; i++) {
-                    leftBuffer[i] = 0.0f;
-                    rightBuffer[i] = 0.0f;
-                }
-                
-                mSampleParts[part].render(leftBuffer, rightBuffer, numFrames);
-                
-                // Sum to output
-                for (int32_t i = 0; i < numFrames; i++) {
-                    outputBuffer[i * numChannels] += leftBuffer[i];
-                    outputBuffer[i * numChannels + 1] += rightBuffer[i];
+            // M4.5: Solo logic - only render if:
+            // - No part is soloed AND part is not muted, OR
+            // - This part is soloed AND not muted
+            bool partMuted = mSampleParts[part].isMuted();
+            bool partSoloed = mSampleParts[part].isSoloed();
+            
+            if (!partMuted && (!anyPartSoloed || partSoloed)) {
+                if (mSampleParts[part].hasSample()) {
+                    // Render to preallocated buffers (M4.5: no VLAs!)
+                    // Clear buffers
+                    for (int32_t i = 0; i < numFrames; i++) {
+                        mPartLeftBuffer[i] = 0.0f;
+                        mPartRightBuffer[i] = 0.0f;
+                    }
+                    
+                    mSampleParts[part].render(mPartLeftBuffer.data(), mPartRightBuffer.data(), numFrames);
+                    
+                    // Sum to leftOut/rightOut (M6: pre-FX buffers)
+                    for (int32_t i = 0; i < numFrames; i++) {
+                        leftOut[i] += mPartLeftBuffer[i];
+                        rightOut[i] += mPartRightBuffer[i];
+                    }
                 }
             }
         }
         
         // M5: Render synth part (Part 8)
-        if (mSynthPart.isPlaying()) {
-            float leftBuffer[numFrames];
-            float rightBuffer[numFrames];
-            
-            for (int32_t i = 0; i < numFrames; i++) {
-                leftBuffer[i] = 0.0f;
-                rightBuffer[i] = 0.0f;
+        // M4.5: Solo logic - only render if:
+        // - No part is soloed AND part is not muted, OR
+        // - This part is soloed AND not muted
+        bool synthMuted = mSynthPart.isMuted();
+        bool synthSoloed = mSynthPart.isSoloed();
+        
+        if (!synthMuted && (!anyPartSoloed || synthSoloed)) {
+            if (mSynthPart.isPlaying()) {
+                // Clear buffers
+                for (int32_t i = 0; i < numFrames; i++) {
+                    mSynthLeftBuffer[i] = 0.0f;
+                    mSynthRightBuffer[i] = 0.0f;
+                }
+                
+                mSynthPart.render(mSynthLeftBuffer.data(), mSynthRightBuffer.data(), numFrames);
+                
+                // Sum to leftOut/rightOut (M6: pre-FX buffers)
+                for (int32_t i = 0; i < numFrames; i++) {
+                    leftOut[i] += mSynthLeftBuffer[i];
+                    rightOut[i] += mSynthRightBuffer[i];
+                }
             }
-            
-            mSynthPart.render(leftBuffer, rightBuffer, numFrames);
-            
-            // Sum to output
-            for (int32_t i = 0; i < numFrames; i++) {
-                outputBuffer[i * numChannels] += leftBuffer[i];
-                outputBuffer[i * numChannels + 1] += rightBuffer[i];
-            }
+        }
+        
+        // M6: Process FX Chain (Delay ’ Reverb ’ Valve ’ Limiter)
+        mFXManager.process(leftOut, rightOut, leftOut, rightOut, numFrames);
+        
+        // M6: Copy processed output to interleaved outputBuffer
+        for (int32_t i = 0; i < numFrames; i++) {
+            outputBuffer[i * numChannels] = leftOut[i];
+            outputBuffer[i * numChannels + 1] = rightOut[i];
         }
         
         // M5: Keep test tone for debugging (optional, comment out for production)
@@ -714,4 +762,68 @@ void AudioEngine::generateSine(float *outputBuffer, int32_t numFrames, int32_t n
     
     // Store phase for next callback (atomic store)
     mPhase.store(phase);
+}
+
+// M6: FX Control methods
+void AudioEngine::setDelayTimeMs(float timeMs) {
+    mFXManager.setDelayTimeMs(timeMs);
+}
+
+void AudioEngine::setDelayFeedback(float feedback) {
+    mFXManager.setDelayFeedback(feedback);
+}
+
+void AudioEngine::setDelayMix(float mix) {
+    mFXManager.setDelayMix(mix);
+}
+
+void AudioEngine::setReverbSize(float size) {
+    mFXManager.setReverbSize(size);
+}
+
+void AudioEngine::setReverbDensity(float density) {
+    mFXManager.setReverbDensity(density);
+}
+
+void AudioEngine::setReverbMix(float mix) {
+    mFXManager.setReverbMix(mix);
+}
+
+void AudioEngine::setValveAmount(float amount) {
+    mFXManager.setValveAmount(amount);
+}
+
+void AudioEngine::setLimiterThresholdDb(float thresholdDb) {
+    mFXManager.setLimiterThresholdDb(thresholdDb);
+}
+
+void AudioEngine::setLimiterReleaseMs(float releaseMs) {
+    mFXManager.setLimiterReleaseMs(releaseMs);
+}
+
+// M6: Degradation control
+void AudioEngine::setDegradationLevel(int level) {
+    if (level < 0) level = 0;
+    if (level > 2) level = 2;
+    
+    Tribex::DegradationLevel degradLevel = static_cast<Tribex::DegradationLevel>(level);
+    mFXManager.setDegradationLevel(degradLevel);
+    
+    // Update max voices for sample parts
+    int32_t maxVoices = mFXManager.getMaxVoices();
+    for (int32_t i = 0; i < 8; i++) {
+        mSampleParts[i].setMaxVoices(maxVoices);
+    }
+}
+
+int AudioEngine::getDegradationLevel() const {
+    return static_cast<int>(mFXManager.getDegradationLevel());
+}
+
+int32_t AudioEngine::getMaxVoices() const {
+    return mFXManager.getMaxVoices();
+}
+
+void AudioEngine::resetXRunCounter() {
+    mFXManager.resetXRunCounter();
 }

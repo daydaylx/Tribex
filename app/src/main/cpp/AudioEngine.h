@@ -1,42 +1,45 @@
-#ifndef TRIBEX_AUDIOENGINE_H
-#define TRIBEX_AUDIOENGINE_H
+#pragma once
 
-#include <atomic>
-#include <oboe/Oboe.h>
-#include <cstdint>
 #include <memory>
+#include <atomic>
+#include <array>
+#include <string>
+
+#include "Tribex.h"
+#include "AudioEvent.h"
 #include "EventQueue.h"
-#include "AudioEvents.h"
-#include "PatternData.h"
-#include "Sequencer.h"
 #include "SamplePart.h"
 #include "SynthPart.h"
-#include "SampleLoader.h"
+#include "Sequencer.h"
+#include "FXManager.h"
+#include "oboe/Oboe.h"
 
-class AudioEngine : public oboe::AudioStreamDataCallback,
-                    public oboe::AudioStreamErrorCallback {
+// QA: Telemetry constants
+constexpr int32_t MAX_I16_BUFFER_SIZE = 2048;  // Max frames * channels
+
+class AudioEngine {
 public:
     AudioEngine();
     ~AudioEngine();
 
-    // Lifecycle - called from UI thread via JNI
+    // Audio lifecycle
     bool start();
     bool stop();
     bool isPlaying() const;
 
-    // Event control - called from UI thread via JNI (non-blocking)
+    // Master control
     void setMasterGain(float gain);
     void setMasterPan(float pan);
     void setTestToneFrequency(float freq);
-    void setBPM(float bpm);  // M2 NEU
+
+    // Sequencer control
+    void setBPM(float bpm);
     void clearEvents();
-    
-    // Sequencer control - M2 NEU
     void startSequencer();
     void stopSequencer();
     bool isSequencerPlaying() const;
 
-    // M4: Sample Engine control (called from UI thread via JNI, non-blocking)
+    // M4: Sample Engine methods
     void loadSample(uint32_t partIndex, const Tribex::SampleData& sample);
     void unloadSample(uint32_t partIndex);
     void setVoicePitch(uint32_t partIndex, float pitch);
@@ -44,68 +47,100 @@ public:
     void setVoiceLevel(uint32_t partIndex, float level);
     void setVoiceDecay(uint32_t partIndex, float decayMs);
     void setVoiceFilter(uint32_t partIndex, Tribex::FilterType filter);
+
+    // M5: Part control
     void setPartMute(uint32_t partIndex, bool muted);
     void setPartSolo(uint32_t partIndex, bool solo);
-    
-    // M5: Synth Part control (Part 8 only)
-    void setSynthWavetable(uint32_t partIndex, uint8_t type);  // 0-5: saw, square, sine, maj, min, 7th
-    void setSynthCutoff(uint32_t partIndex, float cutoff);     // Normalized 0-1
-    void setSynthResonance(uint32_t partIndex, float resonance); // 0-1
+
+    // M5: Synth Part control methods (Part 8 only)
+    void setSynthWavetable(uint32_t partIndex, uint8_t type);
+    void setSynthCutoff(uint32_t partIndex, float cutoff);
+    void setSynthResonance(uint32_t partIndex, float resonance);
     void setSynthAttack(uint32_t partIndex, float attackMs);
     void setSynthDecay(uint32_t partIndex, float decayMs);
     void setSynthSustain(uint32_t partIndex, float sustainLevel);
     void setSynthRelease(uint32_t partIndex, float releaseMs);
 
-    // Oboe audio callback (called from audio thread)
+    // M6: FX Control methods
+    void setDelayTimeMs(float timeMs);
+    void setDelayFeedback(float feedback);
+    void setDelayMix(float mix);
+    void setReverbSize(float size);
+    void setReverbDensity(float density);
+    void setReverbMix(float mix);
+    void setValveAmount(float amount);
+    void setLimiterThresholdDb(float thresholdDb);
+    void setLimiterReleaseMs(float releaseMs);
+
+    // M6: Degradation control
+    void setDegradationLevel(int level);
+    int getDegradationLevel() const;
+    int32_t getMaxVoices() const;
+    void resetXRunCounter();
+
+    // QA: Error telemetry getters (thread-safe)
+    uint32_t getInvalidEventCount() const;
+    uint32_t getLastInvalidEventType() const;
+    void resetInvalidEventCount();
+
+    // Audio callback (Oboe)
     oboe::DataCallbackResult onAudioReady(
         oboe::AudioStream *stream,
         void *audioData,
-        int32_t numFrames
-    );
+        int32_t numFrames);
 
     // Error callback
     void onErrorAfterClose(oboe::AudioStream *stream, oboe::Result result);
 
 private:
-    // Stream management
+    // Oboe stream management
     oboe::Result openStream();
     oboe::Result closeStream();
 
-    // Audio generation (realtime, no allocations!)
+    // Test tone generation
     void generateSine(float *outputBuffer, int32_t numFrames, int32_t numChannels);
-    
-    // Event processing (realtime, no allocations!)
+
+    // Event queue processing
     void processEvents();
 
     // State
     std::atomic<bool> mIsPlaying;
     std::atomic<bool> mShouldRestart;
-    
-    // Stream
-    oboe::ManagedStream mStream;
-
-    // Event queue (lock-free SPSC)
-    LockFreeQueue<AudioEvent, 256> mEventQueue;
-
-    // Audio parameters (atomic for lock-free access)
+    EventQueue<AudioEvent, 32> mEventQueue;
     std::atomic<float> mMasterGain;
     std::atomic<float> mMasterPan;
     std::atomic<float> mTestToneFrequency;
-
-    // Sine wave generation (phase accumulation)
     std::atomic<double> mPhase;
-    static constexpr double kTwoPi = 6.283185307179586;
-    
-    // M2: Sequencer
-    Tribex::Sequencer mSequencer;
-    std::atomic<int64_t> mSampleCounter;  // Global sample counter for timing
-    static constexpr int32_t MAX_TRIGGERS_PER_CALLBACK = Tribex::NUM_PARTS;
-    
-    // M4: Sample Parts (8 drum parts)
-    Tribex::SamplePart mSampleParts[8];  // Parts 0-7: Drum parts
-    
-    // M5: Synth Part (Part 8)
-    Tribex::SynthPart mSynthPart;  // Part 8: Synth part
-};
+    Sequencer mSequencer;
+    std::atomic<int64_t> mSampleCounter;
+    std::atomic<bool> mAnyPartSoloed;
 
-#endif // TRIBEX_AUDIOENGINE_H
+    // QA: Error telemetry counters (atomics, lock-free)
+    std::atomic<uint32_t> mInvalidEventCount;
+    std::atomic<uint32_t> mLastInvalidEventType;
+
+    // M4.5: Preallocated buffers for drum parts (no VLAs!)
+    static constexpr int32_t MAX_FRAMES = 1024;
+    std::array<float, MAX_FRAMES> mPartLeftBuffer;
+    std::array<float, MAX_FRAMES> mPartRightBuffer;
+
+    // M5: Preallocated buffers for synth part
+    std::array<float, MAX_FRAMES> mSynthLeftBuffer;
+    std::array<float, MAX_FRAMES> mSynthRightBuffer;
+
+    // QA: Preallocated I16 temp buffer for VLA fix
+    std::array<float, MAX_I16_BUFFER_SIZE> mI16TempBuffer;
+
+    // Voice parts
+    static constexpr uint32_t NUM_DRUM_PARTS = 8;
+    SamplePart mSampleParts[NUM_DRUM_PARTS];
+
+    // M5: Synth part (Part 8)
+    SynthPart mSynthPart;
+
+    // M6: FX Manager
+    FXManager mFXManager;
+
+    // M2 NEU: Constants
+    static constexpr int32_t MAX_TRIGGERS_PER_CALLBACK = 16;
+};

@@ -419,4 +419,103 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthRelease(JNIEnv 
     gAudioEngine->setSynthRelease(static_cast<uint32_t>(partIndex), releaseMs);
 }
 
+// M6 NEU: FX Control Methods
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetDelayTimeMs(JNIEnv *env, jobject thiz, jfloat timeMs) {
+    if (gAudioEngine) {
+        gAudioEngine->setDelayTimeMs(timeMs);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetDelayFeedback(JNIEnv *env, jobject thiz, jfloat feedback) {
+    if (gAudioEngine) {
+        gAudioEngine->setDelayFeedback(feedback);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetDelayMix(JNIEnv *env, jobject thiz, jfloat mix) {
+    if (gAudioEngine) {
+        gAudioEngine->setDelayMix(mix);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetReverbSize(JNIEnv *env, jobject thiz, jfloat size) {
+    if (gAudioEngine) {
+        gAudioEngine->setReverbSize(size);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetReverbDensity(JNIEnv *env, jobject thiz, jfloat density) {
+    if (gAudioEngine) {
+        gAudioEngine->setReverbDensity(density);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetReverbMix(JNIEnv *env, jobject thiz, jfloat mix) {
+    if (gAudioEngine) {
+        gAudioEngine->setReverbMix(mix);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetValveAmount(JNIEnv *env, jobject thiz, jfloat amount) {
+    if (gAudioEngine) {
+        gAudioEngine->setValveAmount(amount);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetLimiterThresholdDb(JNIEnv *env, jobject thiz, jfloat thresholdDb) {
+    if (gAudioEngine) {
+        gAudioEngine->setLimiterThresholdDb(thresholdDb);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetLimiterReleaseMs(JNIEnv *env, jobject thiz, jfloat releaseMs) {
+    if (gAudioEngine) {
+        gAudioEngine->setLimiterReleaseMs(releaseMs);
+    }
+}
+
+// M6 NEU: Degradation Control Methods
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetDegradationLevel(JNIEnv *env, jobject thiz, jint level) {
+    if (gAudioEngine) {
+        gAudioEngine->setDegradationLevel(level);
+    }
+}
+
+JNIEXPORT jint JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeGetDegradationLevel(JNIEnv *env, jobject thiz) {
+    if (!gAudioEngine) {
+        return 0;
+    }
+    
+    return gAudioEngine->getDegradationLevel();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeGetMaxVoices(JNIEnv *env, jobject thiz) {
+    if (!gAudioEngine) {
+        return 24; // Default
+    }
+    
+    return static_cast<jint>(gAudioEngine->getMaxVoices());
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeResetXRunCounter(JNIEnv *env, jobject thiz) {
+    if (gAudioEngine) {
+        gAudioEngine->resetXRunCounter();
+    }
+}
+
 } // extern "C"

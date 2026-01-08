@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tribex.groovebox.engine.*
+import com.tribex.groovebox.ui.components.WaveformPreview
 
 /**
  * Sample Screen - M4
@@ -70,13 +71,24 @@ fun PartSampleCard(
     part: PartSampleState,
     onVoiceParamChanged: (VoiceParams) -> Unit,
     onPartMuteChanged: (Boolean) -> Unit,
-    onPartSoloChanged: (Boolean) -> Unit
+    onPartSoloChanged: (Boolean) -> Unit,
+    onTrimRangeChanged: (Float, Float) -> Unit = { _, _ -> }
 ) {
     var params by remember { mutableStateOf(part.params) }
     var expanded by remember { mutableStateOf(false) }
+    var trimStart by remember { mutableStateOf(0f) }
+    var trimEnd by remember { mutableStateOf(1f) }
     
     LaunchedEffect(part.params) {
         params = part.params
+    }
+    
+    LaunchedEffect(part.metadata) {
+        if (part.metadata != null) {
+            val (start, end) = part.metadata!!.getTrimRange()
+            trimStart = start
+            trimEnd = end
+        }
     }
     
     Card(
@@ -113,6 +125,35 @@ fun PartSampleCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                
+                // M4.5: Waveform Preview
+                if (part.metadata!!.waveform != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    WaveformPreview(
+                        waveform = part.metadata!!.waveform,
+                        trimStartPercent = trimStart,
+                        trimEndPercent = trimEnd,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    // M4.5: Trim Slider (simplified for M4.5 - using RangeSlider)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Trim",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    RangeSlider(
+                        value = trimStart..trimEnd,
+                        onValueChange = { range ->
+                            trimStart = range.start
+                            trimEnd = range.endInclusive
+                            onTrimRangeChanged(trimStart, trimEnd)
+                        },
+                        valueRange = 0f..1f,
+                        steps = 100
+                    )
+                }
             } else {
                 Text(
                     text = "No sample loaded",

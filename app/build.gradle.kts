@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp") version "1.9.20-1.0.14"  // M8: KSP for Room annotation processing
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.20"  // M8: Kotlin Serialization for JSON
 }
 
 android {
@@ -9,10 +11,10 @@ android {
 
     defaultConfig {
         applicationId = "com.tribex.groovebox"
-        minSdk = 24
+        minSdk = 26  // M4.5: Updated from 24 to 26 for AAudio support (99%+ device coverage)
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"  // M4.5: Version bump
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -51,9 +53,14 @@ android {
         compose = true
         prefab = true
     }
+    
+    // Room schema export location (M8)
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.4.8"
+        kotlinCompilerExtensionVersion = "1.5.10"  // M6: Updated for Kotlin 1.9.22 compatibility
     }
 
     externalNativeBuild {
@@ -67,11 +74,12 @@ android {
 dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-    implementation("androidx.activity:activity-compose:1.8.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")  // M4.5: Updated
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0")  // M8: For ProcessLifecycleOwner
+    implementation("androidx.activity:activity-compose:1.8.2")  // M4.5: Updated
 
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    implementation(platform("androidx.compose:compose-bom:2024.02.01"))  // M4.5: Updated from 2023.10.01
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -79,6 +87,14 @@ dependencies {
 
     // Oboe Audio Library
     implementation("com.google.oboe:oboe:1.8.0")
+
+    // Room Persistence (M8)
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+    
+    // Kotlin Serialization (M8)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -303,4 +303,112 @@ object AudioEngineBridge {
         setTestToneFrequency(clampedFreq)
         Log.d(TAG, "Test tone frequency set to: $clampedFreq Hz")
     }
+    
+    // M6 NEU: FX Control Methods
+    
+    /**
+     * Set delay time
+     * 
+     * @param timeMs Delay time in milliseconds (0.0 to 1000.0)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setDelayTimeMs(timeMs: Float)
+    
+    /**
+     * Set delay feedback
+     * 
+     * @param feedback Feedback amount (0.0 to 0.95)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setDelayFeedback(feedback: Float)
+    
+    /**
+     * Set delay mix (wet/dry balance)
+     * 
+     * @param mix Mix amount (0.0 = dry, 1.0 = wet)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setDelayMix(mix: Float)
+    
+    /**
+     * Set reverb size
+     * 
+     * @param size Reverb size (0.0 = small, 1.0 = large)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setReverbSize(size: Float)
+    
+    /**
+     * Set reverb density
+     * 
+     * @param density Reverb density (0.0 = sparse, 1.0 = dense)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setReverbDensity(density: Float)
+    
+    /**
+     * Set reverb mix (wet/dry balance)
+     * 
+     * @param mix Mix amount (0.0 = dry, 1.0 = wet)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setReverbMix(mix: Float)
+    
+    /**
+     * Set valve saturation amount
+     * 
+     * @param amount Saturation amount (0.0 = clean, 1.0 = saturated)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setValveAmount(amount: Float)
+    
+    /**
+     * Set limiter threshold
+     * 
+     * @param thresholdDb Threshold in dB (-12.0 to -0.3)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setLimiterThresholdDb(thresholdDb: Float)
+    
+    /**
+     * Set limiter release time
+     * 
+     * @param releaseMs Release time in milliseconds (10 to 1000)
+     * Non-blocking - updates atomic parameter
+     */
+    external fun setLimiterReleaseMs(releaseMs: Float)
+    
+    // M6 NEU: Degradation Control Methods
+    
+    /**
+     * Set performance degradation level
+     * 
+     * @param level Degradation level (0 = optimal, 1 = warning, 2 = critical)
+     * Level 0: Max 24 voices, reverb high, valve active
+     * Level 1: Max 16 voices, reverb low, valve active
+     * Level 2: Max 8 voices, reverb off, valve bypass
+     */
+    external fun setDegradationLevel(level: Int)
+    
+    /**
+     * Get current performance degradation level
+     * 
+     * @return Degradation level (0 = optimal, 1 = warning, 2 = critical)
+     */
+    external fun getDegradationLevel(): Int
+    
+    /**
+     * Get maximum voices for current degradation level
+     * 
+     * @return Maximum voices (24, 16, or 8 depending on degradation level)
+     */
+    external fun getMaxVoices(): Int
+    
+    /**
+     * Reset XRun counter
+     * 
+     * Call this periodically to try to downgrade degradation level
+     * when audio is stable
+     */
+    external fun resetXRunCounter()
 }

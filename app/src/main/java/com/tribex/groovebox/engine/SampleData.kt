@@ -16,6 +16,93 @@ enum class FilterType(val id: Int) {
 }
 
 /**
+ * Waveform Data for Preview
+ * 
+ * Downsampled waveform visualization data:
+ * - points: FloatArray of sample values (normalized -1.0 to 1.0)
+ * - maxPoints: Maximum number of points (1000 for efficient rendering)
+ * 
+ * Created on IO thread, consumed by UI thread
+ */
+data class WaveformData(
+    val points: FloatArray = floatArrayOf(),
+    val maxPoints: Int = 1000
+) {
+    companion object {
+        /**
+         * Create downsampled waveform from raw audio data
+         * 
+         * @param audioData Raw float32 audio data (as ByteArray)
+         * @param maxPoints Maximum number of points (default 1000)
+         * @return WaveformData with downsampled points
+         */
+        fun fromAudioData(audioData: ByteArray, maxPoints: Int = 1000): WaveformData {
+            if (audioData.isEmpty()) {
+                return WaveformData(floatArrayOf(), maxPoints)
+            }
+            
+            // Convert ByteArray to FloatArray (audio data is float32)
+            val numSamples = audioData.size / 4
+            val floatData = FloatArray(numSamples)
+            val byteBuffer = java.nio.ByteBuffer.wrap(audioData).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            
+            for (i in 0 until numSamples) {
+                floatData[i] = byteBuffer.getFloat(i * 4)
+            }
+            
+            // Downsample to maxPoints
+            val points = if (numSamples <= maxPoints) {
+                floatData
+            } else {
+                downsample(floatData, maxPoints)
+            }
+            
+            return WaveformData(points, maxPoints)
+        }
+        
+        /**
+         * Downsample audio data to specified number of points
+         * Uses peak-hold algorithm for better visualization
+         */
+        private fun downsample(data: FloatArray, targetSize: Int): FloatArray {
+            val result = FloatArray(targetSize)
+            val blockSize = data.size.toFloat() / targetSize.toFloat()
+            
+            for (i in 0 until targetSize) {
+                val startIdx = (i * blockSize).toInt()
+                val endIdx = ((i + 1) * blockSize).toInt().coerceAtMost(data.size)
+                
+                // Find peak value in this block
+                var peak = 0f
+                for (j in startIdx until endIdx) {
+                    val absValue = kotlin.math.abs(data[j])
+                    if (absValue > peak) {
+                        peak = absValue
+                    }
+                }
+                
+                result[i] = peak
+            }
+            
+            return result
+        }
+    }
+    
+    /**
+     * Get waveform points as Pair<Float, Float> for trim range visualization
+     * Returns (startPercent, endPercent) mapped to waveform indices
+     */
+    fun getTrimmedPoints(startPercent: Float, endPercent: Float): List<Float> {
+        if (points.isEmpty()) return emptyList()
+        
+        val startIdx = (startPercent * points.size).toInt().coerceIn(0, points.size - 1)
+        val endIdx = (endPercent * points.size).toInt().coerceIn(startIdx + 1, points.size)
+        
+        return points.slice(startIdx until endIdx).toList()
+    }
+}
+
+/**
  * Voice Parameters
  * 
  * Parameters that can be adjusted per voice:
@@ -64,6 +151,7 @@ data class VoiceParams(
  * - sampleRate: Original sample rate
  * - startOffset: Trim start offset in samples
  * - endOffset: Trim end offset in samples (0 = end of sample)
+ * - waveform: Downsampled waveform data for preview (max 1000 points)
  */
 data class SampleMetadata(
     val id: Int = 0,
@@ -71,7 +159,8 @@ data class SampleMetadata(
     val lengthMs: Long = 0L,
     val sampleRate: Int = 44100,
     var startOffset: Int = 0,
-    var endOffset: Int = 0
+    var endOffset: Int = 0,
+    var waveform: WaveformData? = null
 ) {
     /**
      * Get trim range in percentage (0.0 to 1.0)

@@ -1,6 +1,7 @@
 package com.tribex.groovebox
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -8,7 +9,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.tribex.groovebox.engine.AudioEngineBridge
+import com.tribex.groovebox.persistence.ProjectManager
 import com.tribex.groovebox.ui.screen.Screen
 import com.tribex.groovebox.ui.screen.PatternScreen
 import com.tribex.groovebox.ui.screen.SoundScreen
@@ -18,6 +24,10 @@ import com.tribex.groovebox.ui.theme.TribexTheme
 import com.tribex.groovebox.engine.PartSampleState
 import com.tribex.groovebox.engine.SampleImportResult
 import com.tribex.groovebox.engine.VoiceParams
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * MainActivity - TribeX M3: PATTERN Screen + Performance UI
@@ -25,10 +35,23 @@ import com.tribex.groovebox.engine.VoiceParams
  * 3 Screens: PATTERN / SOUND / SAMPLE
  * Navigation via bottom bar
  * Per SPEC v3.1: No sub-menus, exactly 3 screens
+ * 
+ * M8: Added autosave on app pause/background
  */
 class MainActivity : ComponentActivity() {
+    
+    private val TAG = "MainActivity"
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private lateinit var projectManager: ProjectManager
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize ProjectManager
+        projectManager = ProjectManager.getInstance(this)
+        
+        // M8: Setup autosave on app pause/background
+        setupAutosave()
         
         setContent {
             TribexTheme {
@@ -42,6 +65,47 @@ class MainActivity : ComponentActivity() {
         // Cleanup native audio engine
         AudioEngineBridge.cleanup()
     }
+    
+    /**
+     * M8: Setup autosave triggers
+     * - App goes to background (ProcessLifecycleOwner.ON_STOP)
+     * - App is paused (Lifecycle.Event.ON_PAUSE)
+     */
+    private fun setupAutosave() {
+        // App background trigger
+        val processObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                Log.d(TAG, "App went to background - triggering autosave")
+                coroutineScope.launch(Dispatchers.IO) {
+                    projectManager.autosave()
+                        .onFailure { e ->
+                            Log.e(TAG, "Autosave failed", e)
+                        }
+                        .onSuccess {
+                            Log.d(TAG, "Autosave successful")
+                        }
+                }
+            }
+        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processObserver)
+        
+        // App pause trigger
+        val activityObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                Log.d(TAG, "App paused - triggering autosave")
+                coroutineScope.launch(Dispatchers.IO) {
+                    projectManager.autosave()
+                        .onFailure { e ->
+                            Log.e(TAG, "Autosave failed", e)
+                        }
+                        .onSuccess {
+                            Log.d(TAG, "Autosave successful")
+                        }
+                }
+            }
+        }
+        lifecycle.addObserver(activityObserver)
+    }
 }
 
 /**
@@ -51,10 +115,13 @@ class MainActivity : ComponentActivity() {
  * Content switches based on selected screen
  * 
  * M4: Added sample state management for SAMPLE screen
+ * M8: Added autosave on screen change
  */
 @Composable
 fun MainNavigation() {
     var currentScreen by remember { mutableStateOf(Screen.PATTERN) }
+    val projectManager = ProjectManager.getInstance(LocalContext.current)
+    val coroutineScope = rememberCoroutineScope()
     
     // M4: Sample state management
     var parts by remember { mutableStateOf(PartSampleState.createEmpty()) }
@@ -63,7 +130,19 @@ fun MainNavigation() {
         bottomBar = {
             NavigationBar(
                 currentScreen = currentScreen,
-                onScreenChange = { currentScreen = it }
+                onScreenChange = { newScreen ->
+                    // M8: Autosave on screen change
+                    coroutineScope.launch(Dispatchers.IO) {
+                        projectManager.autosave()
+                            .onFailure { e ->
+                                android.util.Log.e("MainNavigation", "Autosave failed", e)
+                            }
+                            .onSuccess {
+                                android.util.Log.d("MainNavigation", "Autosave successful on screen change")
+                            }
+                    }
+                    currentScreen = newScreen
+                }
             )
         }
     ) { paddingValues ->

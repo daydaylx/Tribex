@@ -11,6 +11,7 @@ SamplePart::SamplePart(uint32_t partIndex)
     , mMuted(false)
     , mSoloed(false)
     , mFrameCounter(0)
+    , mMaxVoices(MAX_VOICES_PER_PART)
 {
     // Initialize voice start frames
     for (uint32_t i = 0; i < MAX_VOICES_PER_PART; i++) {
@@ -174,7 +175,7 @@ void SamplePart::render(float* leftBuffer, float* rightBuffer, int32_t numFrames
     }
     
     // Render each voice and sum to output buffers
-    for (uint32_t i = 0; i < MAX_VOICES_PER_PART; i++) {
+    for (uint32_t i = 0; i < mMaxVoices; i++) {
         if (mVoices[i].isPlaying()) {
             for (int32_t frame = 0; frame < numFrames; frame++) {
                 float left, right;
@@ -192,7 +193,7 @@ SampleVoice* SamplePart::findOldestVoice() {
     SampleVoice* oldest = nullptr;
     uint64_t oldestStart = UINT64_MAX;
     
-    for (uint32_t i = 0; i < MAX_VOICES_PER_PART; i++) {
+    for (uint32_t i = 0; i < mMaxVoices; i++) {
         if (mVoices[i].isPlaying()) {
             if (mVoiceStartFrames[i] < oldestStart) {
                 oldestStart = mVoiceStartFrames[i];
@@ -205,12 +206,20 @@ SampleVoice* SamplePart::findOldestVoice() {
 }
 
 SampleVoice* SamplePart::findIdleVoice() {
-    for (uint32_t i = 0; i < MAX_VOICES_PER_PART; i++) {
+    for (uint32_t i = 0; i < mMaxVoices; i++) {
         if (!mVoices[i].isPlaying()) {
             return &mVoices[i];
         }
     }
     return nullptr;
+}
+
+void SamplePart::setMaxVoices(uint32_t maxVoices) {
+    // Clamp to valid range (1 to MAX_VOICES_PER_PART)
+    if (maxVoices < 1) maxVoices = 1;
+    if (maxVoices > MAX_VOICES_PER_PART) maxVoices = MAX_VOICES_PER_PART;
+    
+    mMaxVoices = maxVoices;
 }
 
 uint32_t SamplePart::getActiveVoiceCount() const {

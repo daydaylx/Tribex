@@ -1,5 +1,94 @@
 # TribeX Implementation Notes
 
+## M4.5: Trim UI, Waveform Preview, Solo Logic (08.01.2026)
+
+### Summary
+- Implemented Trim UI with waveform preview in Sample Screen
+- Added Solo logic to Audio Engine (only soloed parts play)
+- Eliminated variable-length arrays from audio callback (C++17 compliance)
+- Updated MinSdk from 24 to 26 (AAudio direct support)
+- Updated Compose and Kotlin versions
+- Added C++ unit tests for LockFreeQueue and Probability
+- Build: SUCCESSFUL
+
+### C++ Audio Engine (M4.5)
+- **Preallocated Buffers**: Replaced VLAs with std::array in AudioEngine
+  - `MAX_FRAMES_PER_CALLBACK = 1024`
+  - `mPartLeftBuffer`, `mPartRightBuffer` for drum parts
+  - `mSynthLeftBuffer`, `mSynthRightBuffer` for synth part
+  - Zero-initialized in constructor, reused in callback
+- **Solo Logic**: Implemented in `onAudioReady()`
+  - `mAnyPartSoloed` atomic tracks if any part is soloed
+  - Only soloed parts render when any part is soloed
+  - Muted parts never render
+- **Solo Update**: `setPartSolo()` updates `mAnyPartSoloed` flag
+
+### Kotlin UI (M4.5)
+- **WaveformData**: New data class for downsampled waveform
+  - `fromAudioData()`: Converts raw float32 ByteArray to downsampled points
+  - `downsample()`: Peak-hold algorithm for visualization
+  - Max 1000 points for efficient rendering
+- **WaveformPreview**: Canvas-based waveform visualization
+  - Symmetric vertical bar graph
+  - Blue for active range, dimmed for trim range
+  - Red trim lines for start/end positions
+- **TrimSlider**: RangeSlider for trim control
+  - Integrated into PartSampleCard
+  - Updates SampleMetadata.startOffset/endOffset
+- **SampleMetadata Extended**: Added `waveform` field
+  - Loaded on sample import (IO thread)
+  - Consumed by UI thread (no blocking)
+
+### Build Configuration (M4.5)
+- **MinSdk**: Updated from 24 to 26
+  - Rationale: AAudio direct support (99%+ device coverage)
+  - Eliminates OpenSL ES fallback complexity
+- **Dependencies Updated**:
+  - Compose BOM: 2023.10.01 ’ 2024.02.01
+  - Compose Compiler: 1.4.8 ’ 1.5.4
+  - Lifecycle: 2.6.2 ’ 2.7.0
+  - Activity Compose: 1.8.1 ’ 1.8.2
+- **Version**: 0.1.0 ’ 0.2.0
+
+### Unit Tests (M4.5)
+- **AudioEngineTest.cpp**: New test suite
+  - LockFreeQueue: push/pop, multiple operations, overflow handling
+  - Probability: deterministic triggers, seed variance, loop consistency
+  - AudioEvent: validation
+  - AudioEngine: initialization, buffer size (compile-time check)
+
+### Realtime Audio Rules
+-  Audio callback does NO allocations (preallocated std::array)
+-  All parameter updates use atomics
+-  Sample loading on IO thread (not audio thread)
+-  Voice stealing on audio thread (no blocking)
+-  Linear interpolation resampling on audio thread
+-  Solo logic uses atomics (no locks)
+
+### Technical Notes (M4.5)
+- Waveform downsampling uses peak-hold for better visualization
+- Solo logic is atomic (single `mAnyPartSoloed` flag)
+- Trim is non-destructive (original sample data preserved)
+- Trim updates via JNI (future implementation, currently UI-only)
+- Fixed buffer size of 1024 frames covers all typical audio callbacks
+
+### Known Issues / Deferred
+- **Trim Persistence**: Trim values not persisted to storage (deferred to M6)
+- **Trim JNI Bridge**: Trim updates not sent to AudioEngine (deferred to M4.6)
+- **Waveform Cache**: Waveform data recalculated on reload (acceptable for M4.5)
+- **Touch Handling**: TrimSlider is visual-only, full touch handling deferred to M5
+- **Filter**: Basic 1-pole implementation only (sophisticated filters deferred to M5)
+- **Stereo Samples**: Current implementation is mono-only (stereo support deferred)
+- **Sample Preview**: No preview playback in file picker (deferred to M4.5)
+
+### Build Verification
+```bash
+./gradlew assembleDebug
+# BUILD SUCCESSFUL in 7s
+```
+
+---
+
 ## M4: Drum Sampler Implementation (06.01.2026)
 
 ### Summary

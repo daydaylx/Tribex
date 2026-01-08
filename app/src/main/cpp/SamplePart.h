@@ -97,6 +97,9 @@ public:
     void setMute(bool muted) { mMuted.store(muted, std::memory_order_relaxed); }
     void setSolo(bool solo) { mSoloed.store(solo, std::memory_order_relaxed); }
     
+    // M6: Set max voices for performance degradation (1-4)
+    void setMaxVoices(uint32_t maxVoices);
+    
     // Get active voice count (for monitoring)
     uint32_t getActiveVoiceCount() const;
 
@@ -129,6 +132,9 @@ private:
     
     // Frame counter for voice stealing (int64 to prevent overflow)
     std::atomic<int64_t> mFrameCounter;
+    
+    // M6: Max voices for performance degradation
+    uint32_t mMaxVoices;
 };
 
 } // namespace Tribex
