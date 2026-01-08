@@ -59,12 +59,23 @@ void FXManager::setLimiterReleaseMs(float releaseMs) {
 void FXManager::process(float* leftIn, float* rightIn,
                           float* leftOut, float* rightOut,
                           int32_t numFrames) {
+    // Safety check: null pointer validation
+    if (!leftIn || !rightIn || !leftOut || !rightOut) {
+        return;
+    }
+    
+    // Safety check: validate numFrames
+    if (numFrames <= 0) {
+        return;
+    }
     
     // Ensure buffer size
     if (numFrames > MAX_FRAMES_PER_CALLBACK) {
         // Should not happen, but fallback to direct pass-through
-        std::memcpy(leftOut, leftIn, numFrames * sizeof(float));
-        std::memcpy(rightOut, rightIn, numFrames * sizeof(float));
+        // Safety: clamp to MAX_FRAMES_PER_CALLBACK
+        int32_t safeNumFrames = MAX_FRAMES_PER_CALLBACK;
+        std::memcpy(leftOut, leftIn, safeNumFrames * sizeof(float));
+        std::memcpy(rightOut, rightIn, safeNumFrames * sizeof(float));
         return;
     }
 

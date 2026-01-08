@@ -5,8 +5,7 @@
 #include <array>
 #include <string>
 
-#include "Tribex.h"
-#include "AudioEvent.h"
+#include "AudioEvents.h"
 #include "EventQueue.h"
 #include "SamplePart.h"
 #include "SynthPart.h"
@@ -17,7 +16,8 @@
 // QA: Telemetry constants
 constexpr int32_t MAX_I16_BUFFER_SIZE = 2048;  // Max frames * channels
 
-class AudioEngine {
+class AudioEngine : public oboe::AudioStreamDataCallback,
+                    public oboe::AudioStreamErrorCallback {
 public:
     AudioEngine();
     ~AudioEngine();
@@ -38,6 +38,13 @@ public:
     void startSequencer();
     void stopSequencer();
     bool isSequencerPlaying() const;
+    
+    // Pattern management (direct call, not via event queue - patterns are too large)
+    void setPattern(const Tribex::Pattern& pattern);
+    
+    // P0.4: Sequencer state getters (thread-safe via atomics)
+    uint32_t getCurrentStep() const;
+    uint32_t getLoopIteration() const;
 
     // M4: Sample Engine methods
     void loadSample(uint32_t partIndex, const Tribex::SampleData& sample);
@@ -87,10 +94,10 @@ public:
     oboe::DataCallbackResult onAudioReady(
         oboe::AudioStream *stream,
         void *audioData,
-        int32_t numFrames);
+        int32_t numFrames) override;
 
     // Error callback
-    void onErrorAfterClose(oboe::AudioStream *stream, oboe::Result result);
+    void onErrorAfterClose(oboe::AudioStream *stream, oboe::Result result) override;
 
 private:
     // Oboe stream management
@@ -106,12 +113,13 @@ private:
     // State
     std::atomic<bool> mIsPlaying;
     std::atomic<bool> mShouldRestart;
-    EventQueue<AudioEvent, 32> mEventQueue;
+    oboe::ManagedStream mStream;
+    LockFreeQueue<AudioEvent, 32> mEventQueue;
     std::atomic<float> mMasterGain;
     std::atomic<float> mMasterPan;
     std::atomic<float> mTestToneFrequency;
     std::atomic<double> mPhase;
-    Sequencer mSequencer;
+    Tribex::Sequencer mSequencer;
     std::atomic<int64_t> mSampleCounter;
     std::atomic<bool> mAnyPartSoloed;
 
@@ -128,18 +136,22 @@ private:
     std::array<float, MAX_FRAMES> mSynthLeftBuffer;
     std::array<float, MAX_FRAMES> mSynthRightBuffer;
 
+    // P0.2: Preallocated buffers for FX chain (no stack arrays)
+    std::array<float, MAX_FRAMES> mFXLeftBuffer;
+    std::array<float, MAX_FRAMES> mFXRightBuffer;
+
     // QA: Preallocated I16 temp buffer for VLA fix
     std::array<float, MAX_I16_BUFFER_SIZE> mI16TempBuffer;
 
     // Voice parts
     static constexpr uint32_t NUM_DRUM_PARTS = 8;
-    SamplePart mSampleParts[NUM_DRUM_PARTS];
+    Tribex::SamplePart mSampleParts[NUM_DRUM_PARTS];
 
     // M5: Synth part (Part 8)
-    SynthPart mSynthPart;
+    Tribex::SynthPart mSynthPart;
 
     // M6: FX Manager
-    FXManager mFXManager;
+    Tribex::FXManager mFXManager;
 
     // M2 NEU: Constants
     static constexpr int32_t MAX_TRIGGERS_PER_CALLBACK = 16;

@@ -164,6 +164,16 @@ bool SamplePart::trigger(float velocity) {
 }
 
 void SamplePart::render(float* leftBuffer, float* rightBuffer, int32_t numFrames) {
+    // Safety check: null pointer validation
+    if (!leftBuffer || !rightBuffer) {
+        return;
+    }
+    
+    // Safety check: validate numFrames
+    if (numFrames <= 0 || numFrames > 1024) {
+        return;
+    }
+    
     // Check if sample is loaded
     if (!mSampleLoaded.load(std::memory_order_acquire)) {
         return;
@@ -174,8 +184,14 @@ void SamplePart::render(float* leftBuffer, float* rightBuffer, int32_t numFrames
         return;
     }
     
+    // Safety check: validate mMaxVoices
+    uint32_t safeMaxVoices = (mMaxVoices > MAX_VOICES_PER_PART) ? MAX_VOICES_PER_PART : mMaxVoices;
+    if (safeMaxVoices == 0) {
+        safeMaxVoices = 1;  // At least 1 voice
+    }
+    
     // Render each voice and sum to output buffers
-    for (uint32_t i = 0; i < mMaxVoices; i++) {
+    for (uint32_t i = 0; i < safeMaxVoices; i++) {
         if (mVoices[i].isPlaying()) {
             for (int32_t frame = 0; frame < numFrames; frame++) {
                 float left, right;

@@ -57,6 +57,16 @@ void SynthPart::trigger(float velocity) {
 }
 
 void SynthPart::render(float* leftBuffer, float* rightBuffer, int32_t numFrames) {
+    // Safety check: null pointer validation
+    if (!leftBuffer || !rightBuffer) {
+        return;
+    }
+    
+    // Safety check: validate numFrames
+    if (numFrames <= 0 || numFrames > 1024) {
+        return;
+    }
+    
     // Check mute state (M5: UI only, no audio effect yet)
     if (mMuted.load(std::memory_order_acquire)) {
         return;

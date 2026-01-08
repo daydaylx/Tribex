@@ -21,6 +21,11 @@ object AudioEngineBridge {
     }
     
     /**
+     * Set debug log file path (called from MainActivity)
+     */
+    external fun setDebugLogPath(path: String)
+    
+    /**
      * Start the audio engine
      */
     external fun startAudioEngine(): Boolean
@@ -100,6 +105,31 @@ object AudioEngineBridge {
      * Check if sequencer is currently playing
      */
     external fun isSequencerPlaying(): Boolean
+    
+    /**
+     * P0.4: Get current step index (0-63)
+     * 
+     * Thread-safe - reads from atomic in Sequencer
+     */
+    external fun getCurrentStep(): Int
+    
+    /**
+     * P0.4: Get current loop iteration
+     * 
+     * Thread-safe - reads from atomic in Sequencer
+     */
+    external fun getLoopIteration(): Int
+    
+    /**
+     * Set pattern in sequencer
+     * 
+     * @param patternData Pattern data as ByteArray (serialized C++ Pattern structure)
+     * @param patternLength Pattern length in steps (16, 32, 48, or 64)
+     * @param patternSeed Pattern seed for deterministic probability
+     * 
+     * Note: This is a direct call (not via event queue) since patterns are too large
+     */
+    external fun setPattern(patternData: ByteArray, patternLength: Int, patternSeed: Int)
     
     // M4 NEU: Sample Engine Control Methods
     
@@ -411,4 +441,33 @@ object AudioEngineBridge {
      * when audio is stable
      */
     external fun resetXRunCounter()
+    
+    // P1.2: Export Methods
+    
+    /**
+     * Start offline export
+     * 
+     * @param filename Output WAV file path
+     * @return true if export started successfully
+     */
+    external fun startExport(filename: String): Boolean
+    
+    /**
+     * Stop export (thread-safe)
+     */
+    external fun stopExport()
+    
+    /**
+     * Get export progress (0.0 to 1.0)
+     * 
+     * @return Progress value (0.0 = not started, 1.0 = complete)
+     */
+    external fun getExportProgress(): Float
+    
+    /**
+     * Check if export is currently running
+     * 
+     * @return true if export is in progress
+     */
+    external fun isExporting(): Boolean
 }

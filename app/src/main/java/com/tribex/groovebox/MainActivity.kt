@@ -2,6 +2,7 @@ package com.tribex.groovebox
 
 import android.os.Bundle
 import android.util.Log
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -49,6 +50,10 @@ class MainActivity : ComponentActivity() {
         
         // Initialize ProjectManager
         projectManager = ProjectManager.getInstance(this)
+        
+        // Set debug log path for native code
+        val logFile = File(filesDir, "debug.log")
+        AudioEngineBridge.setDebugLogPath(logFile.absolutePath)
         
         // M8: Setup autosave on app pause/background
         setupAutosave()
@@ -125,6 +130,23 @@ fun MainNavigation() {
     
     // M4: Sample state management
     var parts by remember { mutableStateOf(PartSampleState.createEmpty()) }
+    
+    // P1.3: Ensure project is loaded before showing PatternScreen
+    LaunchedEffect(Unit) {
+        val project = projectManager.getCurrentProject()
+        if (project == null) {
+            // Try to load last project, or create new one
+            projectManager.loadLastProject()
+                .onFailure { e ->
+                    android.util.Log.e("MainNavigation", "Failed to load last project", e)
+                    // Create new project if load fails
+                    projectManager.createProject("Untitled Project")
+                        .onFailure { e2 ->
+                            android.util.Log.e("MainNavigation", "Failed to create project", e2)
+                        }
+                }
+        }
+    }
     
     Scaffold(
         bottomBar = {
