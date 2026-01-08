@@ -16,6 +16,8 @@ add_library(tribex_native SHARED
     SampleVoice.cpp
     SamplePart.cpp
     SampleLoader.cpp
+    WavetableSynth.cpp
+    SynthPart.cpp
 )
 
 target_include_directories(tribex_native PRIVATE

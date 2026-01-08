@@ -2,6 +2,8 @@
 #define TRIBEX_PATTERNDATA_H
 
 #include <cstdint>
+#include <cmath>
+#include <limits>
 
 namespace Tribex {
 
@@ -13,13 +15,30 @@ struct StepData {
     int8_t microtiming;     // -50 to +50 ticks (sample-accurate offset)
     int8_t probability;    // 0-100% (0 = never, 100 = always)
     
-    // M4+: Locks (sparse map) - reserved for future
+    // M5: Synth Parameter Locks (only for Part 8)
+    // NaN = no lock, valid value = locked value
+    float pitchLock;       // Pitch in semitones (-24 to +24)
+    float cutoffLock;      // Filter cutoff (normalized 0-1)
+    float resonanceLock;   // Filter resonance (0-1)
+    float amplitudeLock;   // Amplitude (0-1)
+    float attackLock;      // ADSR Attack (ms)
+    float decayLock;       // ADSR Decay (ms)
+    float sustainLock;     // ADSR Sustain (0-1)
+    float releaseLock;     // ADSR Release (ms)
     
     StepData()
         : gate(0)
         , velocity(1)  // Default: Normal
         , microtiming(0)
         , probability(100)  // Default: Always trigger
+        , pitchLock(std::numeric_limits<float>::quiet_NaN())
+        , cutoffLock(std::numeric_limits<float>::quiet_NaN())
+        , resonanceLock(std::numeric_limits<float>::quiet_NaN())
+        , amplitudeLock(std::numeric_limits<float>::quiet_NaN())
+        , attackLock(std::numeric_limits<float>::quiet_NaN())
+        , decayLock(std::numeric_limits<float>::quiet_NaN())
+        , sustainLock(std::numeric_limits<float>::quiet_NaN())
+        , releaseLock(std::numeric_limits<float>::quiet_NaN())
     {}
 };
 

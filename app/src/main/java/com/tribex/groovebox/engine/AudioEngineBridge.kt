@@ -203,6 +203,78 @@ object AudioEngineBridge {
      */
     external fun setPartSolo(partIndex: Int, solo: Boolean)
     
+    // M5 NEU: Synth Part Control Methods (Part 8 only)
+    
+    /**
+     * Set synth wavetable type
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param wavetableType Wavetable type (0=Saw, 1=Square, 2=Sine, 3=Major, 4=Minor, 5=7th)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthWavetable(partIndex: Int, wavetableType: Int)
+    
+    /**
+     * Set synth filter cutoff
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param cutoff Normalized cutoff (0.0 to 1.0)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthCutoff(partIndex: Int, cutoff: Float)
+    
+    /**
+     * Set synth filter resonance
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param resonance Resonance (0.0 to 1.0)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthResonance(partIndex: Int, resonance: Float)
+    
+    /**
+     * Set synth ADSR attack
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param attackMs Attack time in milliseconds (0.0 to 5000.0)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthAttack(partIndex: Int, attackMs: Float)
+    
+    /**
+     * Set synth ADSR decay
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param decayMs Decay time in milliseconds (0.0 to 5000.0)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthDecay(partIndex: Int, decayMs: Float)
+    
+    /**
+     * Set synth ADSR sustain
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param sustainLevel Sustain level (0.0 to 1.0)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthSustain(partIndex: Int, sustainLevel: Float)
+    
+    /**
+     * Set synth ADSR release
+     * 
+     * @param partIndex Part index (must be 8 for synth)
+     * @param releaseMs Release time in milliseconds (0.0 to 5000.0)
+     * 
+     * Non-blocking - pushes event to queue
+     */
+    external fun setSynthRelease(partIndex: Int, releaseMs: Float)
+    
     // Helper methods with validation
     
     /**

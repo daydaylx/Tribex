@@ -17,7 +17,7 @@ AudioEngine::AudioEngine()
     , mPhase(0.0)
     , mSequencer()
     , mSampleCounter(0)
-    , mParts{0, 1, 2, 3, 4, 5, 6, 7, 8}  // Initialize 9 parts (8 drums + 1 synth)
+    , mSampleParts{0, 1, 2, 3, 4, 5, 6, 7}  // Initialize 8 drum parts
 {
 }
 
@@ -37,6 +37,12 @@ bool AudioEngine::start() {
     if (result != oboe::Result::OK) {
         LOGE("Failed to open stream: %s", oboe::convertToText(result));
         return false;
+    }
+
+    // M5: Initialize synth part
+    if (mStream) {
+        float sampleRate = mStream->getSampleRate();
+        mSynthPart.initialize(sampleRate);
     }
 
     result = mStream->requestStart();
@@ -140,24 +146,24 @@ bool AudioEngine::isSequencerPlaying() const {
 
 // M4: Sample Engine methods
 void AudioEngine::loadSample(uint32_t partIndex, const Tribex::SampleData& sample) {
-    if (partIndex >= Tribex::NUM_PARTS) {
-        LOGE("Invalid part index: %d", partIndex);
+    if (partIndex >= 8) {  // Only drum parts (0-7) load samples
+        LOGE("Invalid part index for sample loading: %d", partIndex);
         return;
     }
     
     // Load sample into part (called from IO thread, allocations allowed)
-    mParts[partIndex].loadSample(sample);
+    mSampleParts[partIndex].loadSample(sample);
     
     LOGI("Loaded sample %d into part %d", sample.id, partIndex);
 }
 
 void AudioEngine::unloadSample(uint32_t partIndex) {
-    if (partIndex >= Tribex::NUM_PARTS) {
-        LOGE("Invalid part index: %d", partIndex);
+    if (partIndex >= 8) {  // Only drum parts (0-7) have samples
+        LOGE("Invalid part index for sample unloading: %d", partIndex);
         return;
     }
     
-    mParts[partIndex].unloadSample();
+    mSampleParts[partIndex].unloadSample();
     
     LOGI("Unloaded sample from part %d", partIndex);
 }
@@ -244,7 +250,12 @@ void AudioEngine::setPartMute(uint32_t partIndex, bool muted) {
         return;
     }
     
-    mParts[partIndex].setMute(muted);
+    // M5: Apply to both drum parts and synth part
+    if (partIndex < 8) {
+        mSampleParts[partIndex].setMute(muted);
+    } else if (partIndex == 8) {
+        mSynthPart.setMute(muted);
+    }
     
     LOGI("Part %d muted: %d", partIndex, muted);
 }
@@ -255,9 +266,127 @@ void AudioEngine::setPartSolo(uint32_t partIndex, bool solo) {
         return;
     }
     
-    mParts[partIndex].setSolo(solo);
+    // M5: Apply to both drum parts and synth part
+    if (partIndex < 8) {
+        mSampleParts[partIndex].setSolo(solo);
+    } else if (partIndex == 8) {
+        mSynthPart.setSolo(solo);
+    }
     
     LOGI("Part %d soloed: %d", partIndex, solo);
+}
+
+// M5: Synth Part control methods (Part 8 only)
+void AudioEngine::setSynthWavetable(uint32_t partIndex, uint8_t type) {
+    if (partIndex != 8) {
+        LOGE("Synth wavetable only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0-5)
+    if (type > 5) type = 5;
+    
+    Tribex::WavetableType wt = static_cast<Tribex::WavetableType>(type);
+    AudioEvent event(EventType::SET_SYNTH_WAVETABLE, static_cast<float>(type), partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - wavetable event dropped");
+    }
+}
+
+void AudioEngine::setSynthCutoff(uint32_t partIndex, float cutoff) {
+    if (partIndex != 8) {
+        LOGE("Synth cutoff only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0.0 to 1.0)
+    if (cutoff < 0.0f) cutoff = 0.0f;
+    if (cutoff > 1.0f) cutoff = 1.0f;
+    
+    AudioEvent event(EventType::SET_SYNTH_CUTOFF, cutoff, partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - cutoff event dropped");
+    }
+}
+
+void AudioEngine::setSynthResonance(uint32_t partIndex, float resonance) {
+    if (partIndex != 8) {
+        LOGE("Synth resonance only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0.0 to 1.0)
+    if (resonance < 0.0f) resonance = 0.0f;
+    if (resonance > 1.0f) resonance = 1.0f;
+    
+    AudioEvent event(EventType::SET_SYNTH_RESONANCE, resonance, partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - resonance event dropped");
+    }
+}
+
+void AudioEngine::setSynthAttack(uint32_t partIndex, float attackMs) {
+    if (partIndex != 8) {
+        LOGE("Synth attack only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0.0 to 5000.0 ms)
+    if (attackMs < 0.0f) attackMs = 0.0f;
+    if (attackMs > 5000.0f) attackMs = 5000.0f;
+    
+    AudioEvent event(EventType::SET_SYNTH_ATTACK, attackMs, partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - attack event dropped");
+    }
+}
+
+void AudioEngine::setSynthDecay(uint32_t partIndex, float decayMs) {
+    if (partIndex != 8) {
+        LOGE("Synth decay only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0.0 to 5000.0 ms)
+    if (decayMs < 0.0f) decayMs = 0.0f;
+    if (decayMs > 5000.0f) decayMs = 5000.0f;
+    
+    AudioEvent event(EventType::SET_SYNTH_DECAY, decayMs, partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - decay event dropped");
+    }
+}
+
+void AudioEngine::setSynthSustain(uint32_t partIndex, float sustainLevel) {
+    if (partIndex != 8) {
+        LOGE("Synth sustain only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0.0 to 1.0)
+    if (sustainLevel < 0.0f) sustainLevel = 0.0f;
+    if (sustainLevel > 1.0f) sustainLevel = 1.0f;
+    
+    AudioEvent event(EventType::SET_SYNTH_SUSTAIN, sustainLevel, partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - sustain event dropped");
+    }
+}
+
+void AudioEngine::setSynthRelease(uint32_t partIndex, float releaseMs) {
+    if (partIndex != 8) {
+        LOGE("Synth release only valid for part 8");
+        return;
+    }
+    
+    // Clamp to valid range (0.0 to 5000.0 ms)
+    if (releaseMs < 0.0f) releaseMs = 0.0f;
+    if (releaseMs > 5000.0f) releaseMs = 5000.0f;
+    
+    AudioEvent event(EventType::SET_SYNTH_RELEASE, releaseMs, partIndex);
+    if (!mEventQueue.push(event)) {
+        LOGE("Event queue full - release event dropped");
+    }
 }
 
 void AudioEngine::processEvents() {
@@ -293,40 +422,100 @@ void AudioEngine::processEvents() {
             case EventType::TRIGGER_VOICE:
                 if (partIndex < Tribex::NUM_PARTS) {
                     float velocity = Tribex::velocityToFloat(static_cast<uint8_t>(event.value * 3.0f));
-                    mParts[partIndex].trigger(velocity);
+                    if (partIndex < 8) {
+                        mSampleParts[partIndex].trigger(velocity);
+                    } else if (partIndex == 8) {
+                        mSynthPart.trigger(velocity);
+                    }
                 }
                 break;
                 
             case EventType::SET_VOICE_PITCH:
                 if (partIndex < Tribex::NUM_PARTS) {
-                    mParts[partIndex].setPitch(event.value);
+                    if (partIndex < 8) {
+                        mSampleParts[partIndex].setPitch(event.value);
+                    } else if (partIndex == 8) {
+                        mSynthPart.setPitch(event.value);
+                    }
                 }
                 break;
                 
             case EventType::SET_VOICE_PAN:
-                if (partIndex < Tribex::NUM_PARTS) {
-                    mParts[partIndex].setPan(event.value);
+                if (partIndex < 8) {  // Only drum parts have pan
+                    mSampleParts[partIndex].setPan(event.value);
                 }
                 break;
                 
             case EventType::SET_VOICE_LEVEL:
                 if (partIndex < Tribex::NUM_PARTS) {
-                    mParts[partIndex].setLevel(event.value);
+                    if (partIndex < 8) {
+                        mSampleParts[partIndex].setLevel(event.value);
+                    } else if (partIndex == 8) {
+                        mSynthPart.setAmplitude(event.value);
+                    }
                 }
                 break;
                 
             case EventType::SET_VOICE_DECAY:
                 if (partIndex < Tribex::NUM_PARTS) {
-                    mParts[partIndex].setDecay(event.value);
+                    if (partIndex < 8) {
+                        mSampleParts[partIndex].setDecay(event.value);
+                    } else if (partIndex == 8) {
+                        mSynthPart.setDecay(event.value);
+                    }
                 }
                 break;
                 
             case EventType::SET_VOICE_FILTER:
-                if (partIndex < Tribex::NUM_PARTS) {
+                if (partIndex < 8) {  // Only drum parts have 1-knob filter
                     Tribex::FilterType filter = (event.value > 0.5f) 
                         ? Tribex::FilterType::HP 
                         : Tribex::FilterType::LP;
-                    mParts[partIndex].setFilter(filter);
+                    mSampleParts[partIndex].setFilter(filter);
+                }
+                break;
+                
+            // M5: Synth Part events
+            case EventType::SET_SYNTH_WAVETABLE:
+                if (partIndex == 8) {
+                    uint8_t type = static_cast<uint8_t>(event.value);
+                    mSynthPart.setWavetable(static_cast<Tribex::WavetableType>(type));
+                }
+                break;
+                
+            case EventType::SET_SYNTH_CUTOFF:
+                if (partIndex == 8) {
+                    mSynthPart.setCutoff(event.value);
+                }
+                break;
+                
+            case EventType::SET_SYNTH_RESONANCE:
+                if (partIndex == 8) {
+                    mSynthPart.setResonance(event.value);
+                }
+                break;
+                
+            case EventType::SET_SYNTH_ATTACK:
+                if (partIndex == 8) {
+                    mSynthPart.setAttack(event.value);
+                }
+                break;
+                
+            case EventType::SET_SYNTH_DECAY:
+                if (partIndex == 8) {
+                    mSynthPart.setDecay(event.value);
+                }
+                break;
+                
+            case EventType::SET_SYNTH_SUSTAIN:
+                if (partIndex == 8) {
+                    mSynthPart.setSustain(event.value);
+                }
+                break;
+                
+            case EventType::SET_SYNTH_RELEASE:
+                if (partIndex == 8) {
+                    mSynthPart.setRelease(event.value);
                 }
                 break;
                 
@@ -365,14 +554,18 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     // Update sequencer (get trigger events)
     mSequencer.update(currentSample, sampleRate, triggers, &numTriggers);
     
-    // M4: Process triggers and play sample voices
+    // M5: Process triggers and play voices (drum + synth)
     for (uint32_t i = 0; i < numTriggers; i++) {
         if (triggers[i].triggered) {
             // Trigger voice for this part
             uint32_t partIndex = triggers[i].partIndex;
             if (partIndex < Tribex::NUM_PARTS) {
                 float velocity = Tribex::velocityToFloat(triggers[i].velocity);
-                mParts[partIndex].trigger(velocity);
+                if (partIndex < 8) {
+                    mSampleParts[partIndex].trigger(velocity);
+                } else if (partIndex == 8) {
+                    mSynthPart.trigger(velocity);
+                }
             }
         }
     }
@@ -380,15 +573,14 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     if (format == oboe::AudioFormat::Float) {
         auto *outputBuffer = static_cast<float *>(audioData);
         
-        // M4: Clear output buffers
+        // Clear output buffers
         for (int32_t i = 0; i < numFrames * numChannels; i++) {
             outputBuffer[i] = 0.0f;
         }
         
-        // Render all sample parts
-        // M4: Only drum parts (0-7), synth (8) not implemented yet
+        // M5: Render all drum parts (0-7)
         for (uint32_t part = 0; part < 8; part++) {
-            if (mParts[part].hasSample()) {
+            if (mSampleParts[part].hasSample()) {
                 // Render to temporary buffers then sum
                 // Note: This is a simple approach, could be optimized
                 float leftBuffer[numFrames];
@@ -399,7 +591,7 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
                     rightBuffer[i] = 0.0f;
                 }
                 
-                mParts[part].render(leftBuffer, rightBuffer, numFrames);
+                mSampleParts[part].render(leftBuffer, rightBuffer, numFrames);
                 
                 // Sum to output
                 for (int32_t i = 0; i < numFrames; i++) {
@@ -409,7 +601,26 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
             }
         }
         
-        // M4: Keep test tone for debugging (optional, comment out for production)
+        // M5: Render synth part (Part 8)
+        if (mSynthPart.isPlaying()) {
+            float leftBuffer[numFrames];
+            float rightBuffer[numFrames];
+            
+            for (int32_t i = 0; i < numFrames; i++) {
+                leftBuffer[i] = 0.0f;
+                rightBuffer[i] = 0.0f;
+            }
+            
+            mSynthPart.render(leftBuffer, rightBuffer, numFrames);
+            
+            // Sum to output
+            for (int32_t i = 0; i < numFrames; i++) {
+                outputBuffer[i * numChannels] += leftBuffer[i];
+                outputBuffer[i * numChannels + 1] += rightBuffer[i];
+            }
+        }
+        
+        // M5: Keep test tone for debugging (optional, comment out for production)
         // generateSine(outputBuffer, numFrames, numChannels);
     } else {
         // Fallback to I16 if needed (shouldn't happen with our config)

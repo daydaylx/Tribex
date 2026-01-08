@@ -10,6 +10,7 @@
 #include "PatternData.h"
 #include "Sequencer.h"
 #include "SamplePart.h"
+#include "SynthPart.h"
 #include "SampleLoader.h"
 
 class AudioEngine : public oboe::AudioStreamDataCallback,
@@ -45,6 +46,15 @@ public:
     void setVoiceFilter(uint32_t partIndex, Tribex::FilterType filter);
     void setPartMute(uint32_t partIndex, bool muted);
     void setPartSolo(uint32_t partIndex, bool solo);
+    
+    // M5: Synth Part control (Part 8 only)
+    void setSynthWavetable(uint32_t partIndex, uint8_t type);  // 0-5: saw, square, sine, maj, min, 7th
+    void setSynthCutoff(uint32_t partIndex, float cutoff);     // Normalized 0-1
+    void setSynthResonance(uint32_t partIndex, float resonance); // 0-1
+    void setSynthAttack(uint32_t partIndex, float attackMs);
+    void setSynthDecay(uint32_t partIndex, float decayMs);
+    void setSynthSustain(uint32_t partIndex, float sustainLevel);
+    void setSynthRelease(uint32_t partIndex, float releaseMs);
 
     // Oboe audio callback (called from audio thread)
     oboe::DataCallbackResult onAudioReady(
@@ -91,8 +101,11 @@ private:
     std::atomic<int64_t> mSampleCounter;  // Global sample counter for timing
     static constexpr int32_t MAX_TRIGGERS_PER_CALLBACK = Tribex::NUM_PARTS;
     
-    // M4: Sample Parts (8 drum parts + 1 synth part, synth not implemented yet)
-    Tribex::SamplePart mParts[Tribex::NUM_PARTS];
+    // M4: Sample Parts (8 drum parts)
+    Tribex::SamplePart mSampleParts[8];  // Parts 0-7: Drum parts
+    
+    // M5: Synth Part (Part 8)
+    Tribex::SynthPart mSynthPart;  // Part 8: Synth part
 };
 
 #endif // TRIBEX_AUDIOENGINE_H

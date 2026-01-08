@@ -30,9 +30,18 @@ enum class EventType : uint8_t {
     SET_VOICE_FILTER = 9,     // value = filter (0.0=LP, 1.0=HP), reserved = partIndex
     LOAD_SAMPLE = 10,         // value = sampleId, reserved = partIndex
     
+    // M5 Events - Synth Part (Part 8 only)
+    SET_SYNTH_WAVETABLE = 11,  // value = type (0-5), reserved = partIndex
+    SET_SYNTH_CUTOFF = 12,      // value = cutoff (0-1), reserved = partIndex
+    SET_SYNTH_RESONANCE = 13,   // value = resonance (0-1), reserved = partIndex
+    SET_SYNTH_ATTACK = 14,      // value = attack (ms), reserved = partIndex
+    SET_SYNTH_DECAY = 15,       // value = decay (ms), reserved = partIndex
+    SET_SYNTH_SUSTAIN = 16,     // value = sustain (0-1), reserved = partIndex
+    SET_SYNTH_RELEASE = 17,     // value = release (ms), reserved = partIndex
+    
     // Reserved for future milestones
-    RESERVED_11 = 11,
-    RESERVED_12 = 12
+    RESERVED_18 = 18,
+    RESERVED_19 = 19
 };
 
 /**
@@ -62,11 +71,11 @@ struct AudioEvent {
     AudioEvent(EventType t, float v, uint32_t r) : type(t), value(v), reserved(r) {}
     
     /**
-     * Check if event is valid (M1+M2+M4 events)
+     * Check if event is valid (M1+M2+M4+M5 events)
      */
     bool isValid() const {
         return type >= EventType::SET_MASTER_GAIN && 
-               type <= EventType::LOAD_SAMPLE;
+               type <= EventType::SET_SYNTH_RELEASE;
     }
 };
 

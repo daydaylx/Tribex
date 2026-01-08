@@ -312,4 +312,111 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetPartSolo(JNIEnv *env
     gAudioEngine->setPartSolo(static_cast<uint32_t>(partIndex), solo == JNI_TRUE);
 }
 
+// M5 NEU: Synth Part Control Methods (Part 8 only)
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthWavetable(JNIEnv *env, jobject thiz, 
+                                                                   jint partIndex, jint wavetableType) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth wavetable only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthWavetable(static_cast<uint32_t>(partIndex), static_cast<uint8_t>(wavetableType));
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthCutoff(JNIEnv *env, jobject thiz, 
+                                                                 jint partIndex, jfloat cutoff) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth cutoff only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthCutoff(static_cast<uint32_t>(partIndex), cutoff);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthResonance(JNIEnv *env, jobject thiz, 
+                                                                    jint partIndex, jfloat resonance) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth resonance only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthResonance(static_cast<uint32_t>(partIndex), resonance);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthAttack(JNIEnv *env, jobject thiz, 
+                                                                  jint partIndex, jfloat attackMs) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth attack only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthAttack(static_cast<uint32_t>(partIndex), attackMs);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthDecay(JNIEnv *env, jobject thiz, 
+                                                                  jint partIndex, jfloat decayMs) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth decay only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthDecay(static_cast<uint32_t>(partIndex), decayMs);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthSustain(JNIEnv *env, jobject thiz, 
+                                                                    jint partIndex, jfloat sustainLevel) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth sustain only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthSustain(static_cast<uint32_t>(partIndex), sustainLevel);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_nativeSetSynthRelease(JNIEnv *env, jobject thiz, 
+                                                                    jint partIndex, jfloat releaseMs) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex != 8) {
+        LOGE("Synth release only valid for part 8, got: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setSynthRelease(static_cast<uint32_t>(partIndex), releaseMs);
+}
+
 } // extern "C"
