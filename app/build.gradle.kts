@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp") version "1.9.22-1.0.18"  // P0.6: Updated for Kotlin 1.9.22 compatibility
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.20"  // M8: Kotlin Serialization for JSON
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"  // M8: Kotlin Serialization for JSON (fixed version match)
     id("io.gitlab.arturbosch.detekt")
 }
 
@@ -108,6 +108,11 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
+    
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

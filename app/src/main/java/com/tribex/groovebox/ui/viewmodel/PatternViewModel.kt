@@ -23,14 +23,25 @@ import android.content.Context
 
 /**
  * PatternViewModel - Manages Pattern state with Room persistence
- * 
+ *
  * P1.3: UI ↔ Room Integration
  * - Loads pattern from Room on init
  * - Saves pattern to Room on step changes (debounced)
  * - Converts between PatternState (UI) and Pattern (Entity)
+ *
+ * This ViewModel manages the state of a single pattern within the TribeX groovebox.
+ * It handles:
+ * - Loading and saving patterns from/to Room database
+ * - Managing pattern state (steps, BPM, etc.)
+ * - Converting between UI state and persistence format
+ * - Debounced saving to avoid excessive database writes
+ * - Communication with the audio engine
+ *
+ * @property context Android context used to access ProjectManager and other services
  */
 class PatternViewModel(context: Context) : ViewModel() {
     
+    private val patternConverter = PatternConverter(context)
     private val projectManager = ProjectManager.getInstance(context)
     
     // UI State
@@ -53,8 +64,12 @@ class PatternViewModel(context: Context) : ViewModel() {
     
     /**
      * Load pattern from Room
-     * 
-     * @param patternIndex Pattern index (0-3)
+     *
+     * Loads a pattern from the Room database and updates the UI state.
+     * If the pattern doesn't exist, creates an empty pattern with the project's BPM.
+     * Also sends the pattern to the audio engine for playback.
+     *
+     * @param patternIndex Pattern index (0-3) within the current project
      */
     fun loadPattern(patternIndex: Int) {
         currentPatternIndex = patternIndex
@@ -67,8 +82,8 @@ class PatternViewModel(context: Context) : ViewModel() {
                 val patternEntity = patternDao.getByProjectAndIndex(project.id, patternIndex)
                 
                 if (patternEntity != null) {
-                    // Convert Pattern Entity to PatternState
-                    val patternState = convertEntityToState(patternEntity)
+                    // Convert Pattern Entity to PatternState using PatternConverter
+                    val patternState = patternConverter.convertEntityToState(patternEntity)
                     withContext(Dispatchers.Main) {
                         // Preserve current page if within bounds
                         val currentPage = _patternState.value.currentPage
@@ -245,8 +260,8 @@ class PatternViewModel(context: Context) : ViewModel() {
         if (project != null && patternDao != null) {
             val currentState = _patternState.value
             
-            // Convert PatternState to Pattern Entity
-            val patternEntity = convertStateToEntity(
+            // Convert PatternState to Pattern Entity using PatternConverter
+            val patternEntity = patternConverter.convertStateToEntity(
                 currentState,
                 project.id,
                 currentPatternIndex
@@ -263,192 +278,9 @@ class PatternViewModel(context: Context) : ViewModel() {
         }
     }
     
-    /**
-     * Convert Pattern Entity to PatternState
-     */
-    private suspend fun convertEntityToState(entity: PatternEntity): PatternState = withContext(Dispatchers.IO) {
-        // Parse JSON steps
-        val patternData = PatternStepsConverter.toPatternData(entity.steps)
-        
-        // Load BPM from project
-        val project = projectManager.getCurrentProject()
-        val bpm = project?.bpm ?: 120f
-        
-        // Convert to PatternState format
-        // PatternState uses List<List<StepDisplayState>> for 9 parts × 16 steps (current page)
-        // Pattern Entity stores all steps (up to 64) as JSON
-        // We load the current page (16 steps) based on currentPage
-        
-        val patternLength = entity.length
-        val stepsPerPage = 16
-        
-        // Get current page from state (preserved during load)
-        val currentPage = withContext(Dispatchers.Main) {
-            _patternState.value.currentPage
-        }
-        
-        // Ensure current page is within bounds
-        val maxPage = ((patternLength - 1) / stepsPerPage).toUInt()
-        val safePage = if (currentPage <= maxPage) currentPage else 0u
-        
-        val steps = List(9) { partIndex ->
-            List(stepsPerPage) { pageStepIndex ->
-                // Calculate absolute step index (current page offset + page step)
-                val absoluteStepIndex = (safePage.toInt() * stepsPerPage) + pageStepIndex
-                
-                // Get step data from patternData (only if within pattern length)
-                val stepData = if (absoluteStepIndex < patternLength) {
-                    patternData.steps.getOrNull(absoluteStepIndex)?.get(partIndex)
-                } else {
-                    null
-                }
-                
-                // Convert velocity from MIDI (0-127) to 2-bit (0-3) for PatternState
-                val midiVelocity = stepData?.velocity ?: 80
-                val velocity2bit: UByte = when {
-                    midiVelocity < 45 -> 0u  // Ghost
-                    midiVelocity < 75 -> 1u  // Normal
-                    midiVelocity < 95 -> 2u  // Accent
-                    else -> 3u  // Max
-                }.toUByte()
-                
-                StepDisplayState(
-                    stepIndex = pageStepIndex.toUInt(),
-                    partIndex = partIndex.toUInt(),
-                    gate = stepData?.gate ?: false,
-                    velocity = velocity2bit,
-                    probability = (stepData?.probability ?: 100).toUByte().coerceIn(0u, 100u),
-                    microtiming = (stepData?.microtiming ?: 0).toByte().coerceIn(-50, 50)
-                )
-            }
-        }
-        
-        PatternState(
-            currentStep = 0u,
-            bpm = bpm,
-            isPlaying = false,
-            currentPatternId = entity.patternIndex.toUInt(),
-            patternLengthSteps = entity.length.toUInt(),
-            currentPage = safePage,
-            patternSeed = entity.seed.toUInt(),
-            steps = steps
-        )
-    }
+
     
-    /**
-     * Convert PatternState to Pattern Entity
-     * 
-     * Handles multi-page patterns (16/32/48/64 steps)
-     * Merges current page changes with existing pattern data
-     */
-    private suspend fun convertStateToEntity(
-        state: PatternState,
-        projectId: String,
-        patternIndex: Int
-    ): PatternEntity = withContext(Dispatchers.IO) {
-        // Get existing pattern to merge with
-        val existingPattern = projectManager.getPatternDao()
-            ?.getByProjectAndIndex(projectId, patternIndex)
-        
-        // Parse existing pattern data (if exists) or create empty
-        val existingPatternData = if (existingPattern != null && existingPattern.steps.isNotEmpty()) {
-            try {
-                PatternStepsConverter.toPatternData(existingPattern.steps)
-            } catch (e: Exception) {
-                // If parsing fails, create empty pattern
-                PatternData(steps = emptyList())
-            }
-        } else {
-            PatternData(steps = emptyList())
-        }
-        
-        // Calculate pattern length
-        val patternLength = state.patternLengthSteps.toInt()
-        val stepsPerPage = 16
-        val currentPage = state.currentPage.toInt()
-        
-        // Create mutable list of all steps (up to patternLength)
-        val allSteps = mutableListOf<Map<Int, PersistenceStepData>>()
-        
-        // Initialize with existing steps (if any)
-        for (i in 0 until patternLength.coerceAtMost(existingPatternData.steps.size)) {
-            allSteps.add(existingPatternData.steps.getOrNull(i)?.toMutableMap() ?: mutableMapOf())
-        }
-        
-        // Fill remaining steps with empty maps if needed
-        while (allSteps.size < patternLength) {
-            allSteps.add(mutableMapOf())
-        }
-        
-        // Update current page steps from PatternState
-        val pageStartIndex = currentPage * stepsPerPage
-        for (pageStepIndex in 0 until stepsPerPage) {
-            val absoluteStepIndex = pageStartIndex + pageStepIndex
-            
-            // Only update if within pattern length
-            if (absoluteStepIndex < patternLength) {
-                val stepMap = allSteps[absoluteStepIndex].toMutableMap()
-                
-                // Update all parts for this step
-                state.steps.forEachIndexed { partIndex, partSteps ->
-                    if (pageStepIndex < partSteps.size) {
-                        val stepDisplayState = partSteps[pageStepIndex]
-                        // Convert velocity from 2-bit (0-3) to MIDI (0-127) for persistence
-                        val velocity2bit = stepDisplayState.velocity.toInt().coerceIn(0, 3)
-                        val midiVelocity = when (velocity2bit) {
-                            0 -> 40   // Ghost
-                            1 -> 80   // Normal
-                            2 -> 115  // Accent
-                            3 -> 127  // Max
-                            else -> 80  // Default to Normal
-                        }
-                        stepMap[partIndex] = PersistenceStepData(
-                            gate = stepDisplayState.gate,
-                            velocity = midiVelocity,
-                            microtiming = stepDisplayState.microtiming.toInt(),
-                            probability = stepDisplayState.probability.toInt(),
-                            locks = emptyMap()
-                        )
-                    }
-                }
-                
-                allSteps[absoluteStepIndex] = stepMap
-            }
-        }
-        
-        // Count active steps in allSteps for debugging
-        var activeStepsInAllSteps = 0
-        for (stepIndex in 0 until patternLength) {
-            val stepMap = allSteps.getOrNull(stepIndex)
-            if (stepMap != null) {
-                for (partIndex in 0 until 9) {
-                    val stepData = stepMap[partIndex]
-                    if (stepData?.gate == true) {
-                        activeStepsInAllSteps++
-                    }
-                }
-            }
-        }
-        android.util.Log.d("PatternViewModel", "convertStateToEntity: patternLength=$patternLength, allSteps.size=${allSteps.size}, activeStepsInAllSteps=$activeStepsInAllSteps, currentPage=$currentPage")
-        
-        // Convert to PatternData and serialize
-        val patternData = PatternData(steps = allSteps)
-        val stepsJson = PatternStepsConverter.fromPatternData(patternData)
-        
-        // Return updated or new pattern entity
-        existingPattern?.copy(
-            steps = stepsJson,
-            length = patternLength,
-            seed = state.patternSeed.toInt()
-        ) ?: PatternEntity(
-            id = java.util.UUID.randomUUID().toString(),
-            projectId = projectId,
-            patternIndex = patternIndex,
-            steps = stepsJson,
-            length = patternLength,
-            seed = state.patternSeed.toInt()
-        )
-    }
+
     
     /**
      * Send pattern data to audio engine
@@ -466,7 +298,7 @@ class PatternViewModel(context: Context) : ViewModel() {
                     
                     if (patternLength > 0) {
                         // Convert PatternState to full PatternEntity (includes all steps, not just current page)
-                        val patternEntity = convertStateToEntity(state, project.id, currentPatternIndex)
+                        val patternEntity = patternConverter.convertStateToEntity(state, project.id, currentPatternIndex)
                         val patternData = PatternStepsConverter.toPatternData(patternEntity.steps)
                         
                         // Serialize pattern: C++ Pattern structure is:

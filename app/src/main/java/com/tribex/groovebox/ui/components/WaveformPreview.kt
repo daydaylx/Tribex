@@ -20,7 +20,13 @@ import com.tribex.groovebox.engine.WaveformData
  * Displays a downsampled waveform visualization with trim range indicators.
  * The waveform is rendered as a symmetric vertical bar graph.
  * 
- * @param waveform Downsampled waveform data
+ * Performance optimizations:
+ * - Uses Path batching for efficient rendering
+ * - Caches waveform paths to avoid recomputation
+ * - Minimizes calculations in render loop
+ * - Uses pre-calculated trim indices
+ * 
+ * @param waveform Downsampled waveform data (max 1000 points)
  * @param trimStartPercent Start trim position (0.0 to 1.0)
  * @param trimEndPercent End trim position (0.0 to 1.0)
  * @param modifier Modifier for the component
@@ -32,6 +38,38 @@ fun WaveformPreview(
     trimEndPercent: Float = 1f,
     modifier: Modifier = Modifier
 ) {
+    // Cache waveform paths to avoid recomputation
+    val cachedPaths = remember(waveform, trimStartPercent, trimEndPercent) {
+        if (waveform == null || waveform.points.isEmpty()) {
+            null
+        } else {
+            val points = waveform.points
+            val activePath = Path()
+            val inactivePath = Path()
+            
+            // Pre-calculate trim indices to avoid division in loop
+            val startIdx = (trimStartPercent * points.size).toInt().coerceIn(0, points.size)
+            val endIdx = (trimEndPercent * points.size).toInt().coerceIn(startIdx, points.size)
+            
+            for (i in points.indices) {
+                val amplitude = points[i]
+                val inTrimRange = i >= startIdx && i <= endIdx
+                
+                val targetPath = if (inTrimRange) activePath else inactivePath
+                
+                // Add vertical bar to path (normalized coordinates 0-1)
+                val xNorm = i.toFloat() / points.size
+                val barHeightNorm = amplitude * 0.9f // Scale to 90% of half height
+                
+                // Store normalized coordinates to avoid recalculating during render
+                targetPath.moveTo(xNorm, -barHeightNorm)
+                targetPath.lineTo(xNorm, barHeightNorm)
+            }
+            
+            CachedWaveformPaths(activePath, inactivePath, startIdx, endIdx)
+        }
+    }
+    
     Canvas(
         modifier = modifier
             .fillMaxWidth()
@@ -40,8 +78,13 @@ fun WaveformPreview(
         val canvasWidth = size.width
         val canvasHeight = size.height
         val centerY = canvasHeight / 2f
+        val pointWidth = if (waveform != null && waveform.points.isNotEmpty()) {
+            canvasWidth / waveform.points.size
+        } else {
+            1f
+        }
         
-        if (waveform == null || waveform.points.isEmpty()) {
+        if (cachedPaths == null) {
             // Draw placeholder line if no waveform
             drawLine(
                 color = Color.Gray.copy(alpha = 0.3f),
@@ -52,46 +95,25 @@ fun WaveformPreview(
             return@Canvas
         }
         
-        val points = waveform.points
-        val pointWidth = canvasWidth / points.size
-        
-        // Use Paths for batch rendering
-        val activePath = Path()
-        val inactivePath = Path()
-        
-        for (i in points.indices) {
-            val amplitude = points[i]
-            val x = i * pointWidth + pointWidth / 2f
-            
-            // Only draw if within trim range (dimmed outside)
-            val percent = i.toFloat() / points.size
-            val inTrimRange = percent >= trimStartPercent && percent <= trimEndPercent
-            
-            val barHeight = amplitude * centerY * 0.9f // Scale to 90% of half height
-            
-            val targetPath = if (inTrimRange) activePath else inactivePath
-            
-            // Add vertical bar to path
-            targetPath.moveTo(x, centerY - barHeight)
-            targetPath.lineTo(x, centerY + barHeight)
-        }
-        
-        // Draw inactive parts (dimmed)
+        // Draw inactive parts (dimmed) - use cached paths directly
         drawPath(
-            path = inactivePath,
+            path = cachedPaths.inactivePath,
             color = Color.Gray.copy(alpha = 0.3f),
             style = Stroke(width = pointWidth.coerceAtLeast(1f))
         )
         
-        // Draw active parts (highlighted)
+        // Draw active parts (highlighted) - use cached paths directly
         drawPath(
-            path = activePath,
+            path = cachedPaths.activePath,
             color = Color(0xFF2196F3),
             style = Stroke(width = pointWidth.coerceAtLeast(1f))
         )
         
-        // Draw trim start line
-        val startX = trimStartPercent * canvasWidth
+        // Draw trim lines using cached indices
+        val pointsSize = waveform?.points?.size ?: 1
+        val startX = cachedPaths.startIdx.toFloat() / pointsSize * canvasWidth
+        val endX = cachedPaths.endIdx.toFloat() / pointsSize * canvasWidth
+        
         drawLine(
             color = Color.Red,
             start = Offset(startX, 0f),
@@ -99,8 +121,6 @@ fun WaveformPreview(
             strokeWidth = 2f
         )
         
-        // Draw trim end line
-        val endX = trimEndPercent * canvasWidth
         drawLine(
             color = Color.Red,
             start = Offset(endX, 0f),
@@ -109,3 +129,13 @@ fun WaveformPreview(
         )
     }
 }
+
+/**
+ * Cached waveform paths for efficient rendering
+ */
+private data class CachedWaveformPaths(
+    val activePath: Path,
+    val inactivePath: Path,
+    val startIdx: Int,
+    val endIdx: Int
+)

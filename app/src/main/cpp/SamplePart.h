@@ -127,14 +127,19 @@ private:
     
     // Current sample data (owned by part)
     SampleData mSample;
-    std::vector<float*> mRetiredSamples;
-    std::mutex mRetiredSamplesMutex;
+    
+    // Lock-free retired samples queue (fixed-size ring buffer)
+    static constexpr uint32_t MAX_RETIRED_SAMPLES = 8;
+    float* mRetiredSamples[MAX_RETIRED_SAMPLES];
+    std::atomic<uint32_t> mRetiredWriteIndex;
+    std::atomic<uint32_t> mRetiredReadIndex;
     
     // Sample loaded flag (atomic)
     std::atomic<bool> mSampleLoaded;
     std::atomic<uint32_t> mSampleId;
     std::atomic<uint32_t> mStartOffset;
     std::atomic<uint32_t> mEndOffset;
+    std::atomic<float*> mSampleDataPtr;  // Atomic pointer to sample data
     
     // Mute/Solo state (M4: UI only)
     std::atomic<bool> mMuted;

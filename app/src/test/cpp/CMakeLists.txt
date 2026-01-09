@@ -16,5 +16,18 @@ target_include_directories(tribex_sequencer_tests PRIVATE
     ${TRIBEX_SRC_DIR}
 )
 
+# Note: AudioEngine tests are deferred due to Oboe dependency
+# We'll test the non-Oboe components separately
+add_executable(tribex_samplepart_tests
+    SamplePartTest.cpp
+    ${TRIBEX_SRC_DIR}/SamplePart.cpp
+    ${TRIBEX_SRC_DIR}/SampleVoice.cpp
+)
+
+target_include_directories(tribex_samplepart_tests PRIVATE
+    ${TRIBEX_SRC_DIR}
+)
+
 enable_testing()
 add_test(NAME tribex_sequencer_tests COMMAND tribex_sequencer_tests)
+add_test(NAME tribex_samplepart_tests COMMAND tribex_samplepart_tests)

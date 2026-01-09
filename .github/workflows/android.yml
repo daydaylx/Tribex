@@ -27,10 +27,24 @@ jobs:
       run: ./gradlew :app:assembleDebug
 
     - name: Run Unit Tests
-      run: ./gradlew test
+      run: ./gradlew test --continue
 
     - name: Run Detekt
       run: ./gradlew detekt
 
     - name: Run Native Tests
-      run: ./gradlew nativeTest
+      run: ./gradlew nativeTest --continue
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: app/build/reports/tests/
+
+    - name: Upload Native Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-test-results
+        path: app/build/native-tests/

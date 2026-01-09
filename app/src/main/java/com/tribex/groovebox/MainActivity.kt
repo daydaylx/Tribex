@@ -16,6 +16,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tribex.groovebox.engine.AudioEngineBridge
 import com.tribex.groovebox.persistence.ProjectManager
+import com.tribex.groovebox.audio.SampleAssetLoader
 import com.tribex.groovebox.ui.screen.Screen
 import com.tribex.groovebox.ui.screen.PatternScreen
 import com.tribex.groovebox.ui.screen.SoundScreen
@@ -38,18 +39,26 @@ import kotlinx.coroutines.launch
  * Per SPEC v3.1: No sub-menus, exactly 3 screens
  * 
  * M8: Added autosave on app pause/background
+ * M9: Added auto-load of default 909 samples on startup
  */
 class MainActivity : ComponentActivity() {
     
     private val TAG = "MainActivity"
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var projectManager: ProjectManager
+    private lateinit var sampleLoader: SampleAssetLoader
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         // Initialize ProjectManager
         projectManager = ProjectManager.getInstance(this)
+        
+        // M9: Initialize SampleAssetLoader
+        sampleLoader = SampleAssetLoader(this)
+        
+        // M9: Load default 909 kit on startup
+        loadDefaultSamples()
         
         // M8: Setup autosave on app pause/background
         setupAutosave()
@@ -106,6 +115,26 @@ class MainActivity : ComponentActivity() {
             }
         }
         lifecycle.addObserver(activityObserver)
+    }
+    
+    /**
+     * M9: Load default 909 sample kit on app startup
+     * Runs in background to avoid blocking UI
+     */
+    private fun loadDefaultSamples() {
+        Log.d(TAG, "Starting default sample loading...")
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val result = sampleLoader.loadDefaultKit()
+                if (result.isSuccess) {
+                    Log.i(TAG, "✅ Default 909 kit loaded successfully")
+                } else {
+                    Log.e(TAG, "❌ Failed to load default kit: ${result.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception loading default samples", e)
+            }
+        }
     }
 }
 

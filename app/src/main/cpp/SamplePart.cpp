@@ -6,10 +6,13 @@ namespace Tribex {
 
 SamplePart::SamplePart(uint32_t partIndex)
     : mPartIndex(partIndex)
+    , mRetiredWriteIndex(0)
+    , mRetiredReadIndex(0)
     , mSampleLoaded(false)
     , mSampleId(0)
     , mStartOffset(0)
     , mEndOffset(0)
+    , mSampleDataPtr(nullptr)
     , mMuted(false)
     , mSoloed(false)
     , mFrameCounter(0)
@@ -18,6 +21,11 @@ SamplePart::SamplePart(uint32_t partIndex)
     // Initialize voice start frames
     for (uint32_t i = 0; i < MAX_VOICES_PER_PART; i++) {
         mVoiceStartFrames[i] = 0;
+    }
+    
+    // Initialize retired samples buffer
+    for (uint32_t i = 0; i < MAX_RETIRED_SAMPLES; i++) {
+        mRetiredSamples[i] = nullptr;
     }
 }
 
@@ -63,10 +71,16 @@ void SamplePart::loadSample(const SampleData& sample, bool deferFree) {
             std::memcpy(mSample.data, srcBytes + srcOffset, 
                        effectiveLength * sizeof(float));
             mSample.loaded = true;
-            mSampleLoaded.store(true, std::memory_order_release);
+            
+            // Store pointer atomically BEFORE setting loaded flag
+            mSampleDataPtr.store(mSample.data, std::memory_order_release);
             mSampleId.store(sample.id, std::memory_order_release);
             mStartOffset.store(safeStart, std::memory_order_release);
             mEndOffset.store(safeEnd, std::memory_order_release);
+            
+            // Memory barrier: ensure all sample data is visible before setting flag
+            std::atomic_thread_fence(std::memory_order_release);
+            mSampleLoaded.store(true, std::memory_order_release);
         } else {
             mSample.loaded = false;
             mSampleLoaded.store(false, std::memory_order_release);
@@ -81,12 +95,24 @@ void SamplePart::loadSample(const SampleData& sample, bool deferFree) {
 void SamplePart::unloadSample(bool deferFree) {
     if (mSample.data != nullptr) {
         if (deferFree) {
-            std::lock_guard<std::mutex> lock(mRetiredSamplesMutex);
-            mRetiredSamples.push_back(mSample.data);
+            // Lock-free push to retired samples ring buffer
+            uint32_t writeIdx = mRetiredWriteIndex.load(std::memory_order_acquire);
+            uint32_t nextWriteIdx = (writeIdx + 1) % MAX_RETIRED_SAMPLES;
+            uint32_t readIdx = mRetiredReadIndex.load(std::memory_order_acquire);
+            
+            // Check if buffer is full (with one slot reserved)
+            if (nextWriteIdx != readIdx) {
+                mRetiredSamples[writeIdx] = mSample.data;
+                mRetiredWriteIndex.store(nextWriteIdx, std::memory_order_release);
+            } else {
+                // Buffer full - delete immediately (should rarely happen)
+                delete[] mSample.data;
+            }
         } else {
             delete[] mSample.data;
         }
         mSample.data = nullptr;
+        mSampleDataPtr.store(nullptr, std::memory_order_release);
     }
     
     mSample.length = 0;
@@ -101,11 +127,24 @@ void SamplePart::unloadSample(bool deferFree) {
 }
 
 void SamplePart::releaseRetiredSamples() {
-    std::lock_guard<std::mutex> lock(mRetiredSamplesMutex);
-    for (float* data : mRetiredSamples) {
-        delete[] data;
+    // Lock-free pop from retired samples ring buffer
+    uint32_t readIdx = mRetiredReadIndex.load(std::memory_order_acquire);
+    uint32_t writeIdx = mRetiredWriteIndex.load(std::memory_order_acquire);
+    
+    // Process all retired samples in the queue
+    while (readIdx != writeIdx) {
+        float* data = mRetiredSamples[readIdx];
+        if (data != nullptr) {
+            delete[] data;
+            mRetiredSamples[readIdx] = nullptr;
+        }
+        
+        readIdx = (readIdx + 1) % MAX_RETIRED_SAMPLES;
+        mRetiredReadIndex.store(readIdx, std::memory_order_release);
+        
+        // Reload write index in case new items were added
+        writeIdx = mRetiredWriteIndex.load(std::memory_order_acquire);
     }
-    mRetiredSamples.clear();
 }
 
 void SamplePart::setTrim(uint32_t startOffset, uint32_t endOffset) {

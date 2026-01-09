@@ -242,12 +242,23 @@ SampleLoaderResult SampleLoader::loadWAVFromMemory(const uint8_t* buffer, uint32
 }
 
 float* SampleLoader::convertToMono(const float* data, uint32_t length) {
-    if (data == nullptr) {
+    if (data == nullptr || length == 0) {
+        return nullptr;
+    }
+    
+    // Safety check: ensure length is even (stereo pairs)
+    if (length % 2 != 0) {
         return nullptr;
     }
     
     // Allocate mono buffer (half the size of stereo)
     uint32_t monoLength = length / 2;
+    
+    // Safety check: prevent allocation of huge buffers
+    if (monoLength > 100000000) {  // ~100M samples = ~400MB
+        return nullptr;
+    }
+    
     float* monoData = new (std::nothrow) float[monoLength];
     
     if (monoData == nullptr) {
@@ -284,6 +295,15 @@ bool SampleLoader::validateHeaders(const RiffChunk& riff, const FmtChunk& fmt) {
 }
 
 float* SampleLoader::readPCM16(const uint8_t* data, uint32_t length, int numChannels) {
+    if (data == nullptr || length == 0 || numChannels <= 0) {
+        return nullptr;
+    }
+    
+    // Safety check: prevent allocation of huge buffers
+    if (length > 100000000) {  // ~100M samples
+        return nullptr;
+    }
+    
     float* floatData = new (std::nothrow) float[length];
     
     if (floatData == nullptr) {
@@ -292,8 +312,14 @@ float* SampleLoader::readPCM16(const uint8_t* data, uint32_t length, int numChan
     
     // Convert 16-bit PCM to float (-1.0 to 1.0)
     for (uint32_t i = 0; i < length; i++) {
+        // Safety check: prevent buffer overflow
+        uint32_t byteOffset = i * 2 * numChannels;
+        if (byteOffset + 1 >= length * 2 * numChannels) {
+            break;  // Prevent out-of-bounds access
+        }
+        
         int16_t sample;
-        std::memcpy(&sample, data + i * 2 * numChannels, 2);
+        std::memcpy(&sample, data + byteOffset, 2);
         floatData[i] = static_cast<float>(sample) / 32768.0f;
     }
     
@@ -301,6 +327,15 @@ float* SampleLoader::readPCM16(const uint8_t* data, uint32_t length, int numChan
 }
 
 float* SampleLoader::readPCM24(const uint8_t* data, uint32_t length, int numChannels) {
+    if (data == nullptr || length == 0 || numChannels <= 0) {
+        return nullptr;
+    }
+    
+    // Safety check: prevent allocation of huge buffers
+    if (length > 100000000) {  // ~100M samples
+        return nullptr;
+    }
+    
     float* floatData = new (std::nothrow) float[length];
     
     if (floatData == nullptr) {
@@ -310,7 +345,14 @@ float* SampleLoader::readPCM24(const uint8_t* data, uint32_t length, int numChan
     // Convert 24-bit PCM to float (-1.0 to 1.0)
     for (uint32_t i = 0; i < length; i++) {
         int32_t sample = 0;
-        const uint8_t* bytePtr = data + i * 3 * numChannels;
+        uint32_t byteOffset = i * 3 * numChannels;
+        
+        // Safety check: prevent buffer overflow
+        if (byteOffset + 2 >= length * 3 * numChannels) {
+            break;  // Prevent out-of-bounds access
+        }
+        
+        const uint8_t* bytePtr = data + byteOffset;
         
         // Little-endian 24-bit
         sample = bytePtr[0] | (bytePtr[1] << 8) | (bytePtr[2] << 16);
@@ -327,6 +369,15 @@ float* SampleLoader::readPCM24(const uint8_t* data, uint32_t length, int numChan
 }
 
 float* SampleLoader::readPCM32(const uint8_t* data, uint32_t length, int numChannels) {
+    if (data == nullptr || length == 0 || numChannels <= 0) {
+        return nullptr;
+    }
+    
+    // Safety check: prevent allocation of huge buffers
+    if (length > 100000000) {  // ~100M samples
+        return nullptr;
+    }
+    
     float* floatData = new (std::nothrow) float[length];
     
     if (floatData == nullptr) {
@@ -335,8 +386,14 @@ float* SampleLoader::readPCM32(const uint8_t* data, uint32_t length, int numChan
     
     // Convert 32-bit PCM to float (-1.0 to 1.0)
     for (uint32_t i = 0; i < length; i++) {
+        // Safety check: prevent buffer overflow
+        uint32_t byteOffset = i * 4 * numChannels;
+        if (byteOffset + 3 >= length * 4 * numChannels) {
+            break;  // Prevent out-of-bounds access
+        }
+        
         int32_t sample;
-        std::memcpy(&sample, data + i * 4 * numChannels, 4);
+        std::memcpy(&sample, data + byteOffset, 4);
         floatData[i] = static_cast<float>(sample) / 2147483648.0f;  // 2^31
     }
     
