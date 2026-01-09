@@ -70,21 +70,27 @@ public:
     uint32_t getLoopIteration() const { return mLoopIteration.load(std::memory_order_relaxed); }
     
     // Pattern Management
-    uint32_t getActivePatternId() const { return mActivePattern.id; }
-    uint32_t getPatternLength() const { return mActivePattern.lengthSteps; }
+    uint32_t getActivePatternId() const {
+        uint32_t index = mActivePatternIndex.load(std::memory_order_acquire);
+        return mPatternBuffers[index].id;
+    }
+    uint32_t getPatternLength() const {
+        uint32_t index = mActivePatternIndex.load(std::memory_order_acquire);
+        return mPatternBuffers[index].lengthSteps;
+    }
     
 private:
     // Calculate samples per step based on BPM and sample rate
     double calculateSamplesPerStep(double sampleRate) const;
     
     // Evaluate step trigger for one part
-    bool evaluateStepTrigger(uint32_t partIndex, uint32_t stepIndex, uint32_t loopIteration);
+    bool evaluateStepTrigger(const Pattern& pattern, uint32_t partIndex, uint32_t stepIndex, uint32_t loopIteration);
     
     // Apply microtiming offset
     int64_t applyMicrotiming(int64_t sampleCounter, int8_t microtiming, double sampleRate);
     
     // Calculate current step index from sample counter
-    void calculateCurrentStep(int64_t sampleCounter, double sampleRate);
+    void calculateCurrentStep(int64_t sampleCounter, double sampleRate, uint32_t patternLength);
     
     // Check if step has changed
     bool hasStepChanged() const;
@@ -99,8 +105,9 @@ private:
     std::atomic<uint32_t> mLoopIteration;
     std::atomic<int64_t> mLastStepSampleCounter;
     
-    // Active pattern and chain
-    Pattern mActivePattern;
+    // Active pattern (double-buffered for thread-safe swap)
+    Pattern mPatternBuffers[2];
+    std::atomic<uint32_t> mActivePatternIndex;
     Chain mActiveChain;
     
     // Chain playback state

@@ -15,6 +15,7 @@ OfflineRenderer::OfflineRenderer()
     , mIsExporting(false)
     , mStopRequested(false)
     , mExportResult(false)
+    , mProgress(0.0f)
     , mRenderThread(nullptr)
 {
 }
@@ -26,7 +27,7 @@ OfflineRenderer::~OfflineRenderer() {
     }
 }
 
-void OfflineRenderer::setAudioEngine(AudioEngine* engine) {
+void OfflineRenderer::setAudioEngine(::AudioEngine* engine) {
     mAudioEngine = engine;
 }
 
@@ -46,6 +47,7 @@ bool OfflineRenderer::startExport(const std::string& filename,
     // Reset state
     mStopRequested.store(false);
     mExportResult.store(false);
+    mProgress.store(0.0f);
     mErrorMessage.clear();
     mIsExporting.store(true);
 
@@ -91,8 +93,7 @@ void OfflineRenderer::renderThreadFunc(const std::string& filename,
     // Note: For now, we'll calculate progress based on chain iteration
     // Full chain duration calculation will be in AudioEngine integration
     
-    double totalDurationSeconds = 0.0;
-    int32_t totalFrames = 0;
+    const int64_t totalFrames = static_cast<int64_t>(sampleRate) * 60;
 
     // Render loop
     bool rendering = true;
@@ -120,10 +121,15 @@ void OfflineRenderer::renderThreadFunc(const std::string& filename,
         sampleCounter += RENDER_CHUNK_SIZE;
 
         // Update progress
+        double progress = 0.0;
+        if (totalFrames > 0) {
+            progress = std::min(1.0, static_cast<double>(sampleCounter) / totalFrames);
+        }
+        mProgress.store(static_cast<float>(progress));
+        
         if (progressCallback) {
             double currentTime = static_cast<double>(sampleCounter) / sampleRate;
-            // Progress will be 0.0 to 1.0 when chain duration is known
-            progressCallback(0.5, currentTime);  // Placeholder
+            progressCallback(progress, currentTime);
         }
 
         // For M7: We'll break when chain is complete
@@ -142,6 +148,7 @@ void OfflineRenderer::renderThreadFunc(const std::string& filename,
         mExportResult.store(false);
     }
 
+    mProgress.store(mExportResult.load() ? 1.0f : mProgress.load());
     mIsExporting.store(false);
 }
 

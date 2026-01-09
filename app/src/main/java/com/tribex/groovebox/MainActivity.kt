@@ -51,10 +51,6 @@ class MainActivity : ComponentActivity() {
         // Initialize ProjectManager
         projectManager = ProjectManager.getInstance(this)
         
-        // Set debug log path for native code
-        val logFile = File(filesDir, "debug.log")
-        AudioEngineBridge.setDebugLogPath(logFile.absolutePath)
-        
         // M8: Setup autosave on app pause/background
         setupAutosave()
         

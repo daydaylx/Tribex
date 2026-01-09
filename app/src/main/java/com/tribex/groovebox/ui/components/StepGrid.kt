@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
-import android.util.AttributeSet
 import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,13 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.tribex.groovebox.engine.Velocity
 import com.tribex.groovebox.ui.screen.PatternState
-import com.tribex.groovebox.ui.screen.StepDisplayState
-import kotlinx.coroutines.delay
 
 /**
  * Step Grid Composable
@@ -30,20 +26,17 @@ import kotlinx.coroutines.delay
 fun StepGrid(
     state: PatternState,
     selectedPartIndex: UInt,
-    onPageChange: (Int) -> Unit,
     onStepTap: (Int) -> Unit,
     onSwipeUp: (Int) -> Unit,
     onSwipeDown: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    
     AndroidView(
         factory = { ctx ->
-            StepGridView(ctx, state, selectedPartIndex, onPageChange, onStepTap, onSwipeUp, onSwipeDown)
+            StepGridView(ctx, state, selectedPartIndex, onStepTap, onSwipeUp, onSwipeDown)
         },
         update = { view ->
-            view.updateState(state, selectedPartIndex, onPageChange, onStepTap, onSwipeUp, onSwipeDown)
+            view.updateState(state, selectedPartIndex, onStepTap, onSwipeUp, onSwipeDown)
         },
         modifier = modifier
             .fillMaxSize()
@@ -61,7 +54,6 @@ private class StepGridView(
     context: Context,
     private var state: PatternState,
     private var selectedPartIndex: UInt,
-    private var onPageChange: (Int) -> Unit,
     private var onStepTap: (Int) -> Unit,
     private var onSwipeUp: (Int) -> Unit,
     private var onSwipeDown: (Int) -> Unit
@@ -99,14 +91,15 @@ private class StepGridView(
     fun updateState(
         newState: PatternState,
         newSelectedPartIndex: UInt,
-        newOnPageChange: (Int) -> Unit,
         newOnStepTap: (Int) -> Unit,
         newOnSwipeUp: (Int) -> Unit,
         newOnSwipeDown: (Int) -> Unit
     ) {
         state = newState
         selectedPartIndex = newSelectedPartIndex
-        // Callbacks remain the same (function references don't change)
+        onStepTap = newOnStepTap
+        onSwipeUp = newOnSwipeUp
+        onSwipeDown = newOnSwipeDown
         // Invalidate to trigger redraw
         invalidate()
     }

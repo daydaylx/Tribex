@@ -2,22 +2,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <ctime>
-#include <string>
-
-// Debug log path - will be set from JNI
-static std::string gDebugLogPath = "/data/data/com.tribex.groovebox/files/debug.log";
-
-// Helper function to get log file path (can be set from JNI)
-const char* getDebugLogPath() {
-    return gDebugLogPath.c_str();
-}
-
-// Setter function (called from JNI)
-extern "C" void setDebugLogPathNative(const char* path) {
-    if (path) {
-        gDebugLogPath = std::string(path);
-    }
-}
 
 namespace Tribex {
 
@@ -33,7 +17,9 @@ Sequencer::Sequencer()
     , mSamplesPerStep(0.0)
 {
     // Initialize with empty pattern
-    mActivePattern = Pattern();
+    mPatternBuffers[0] = Pattern();
+    mPatternBuffers[1] = Pattern();
+    mActivePatternIndex.store(0, std::memory_order_relaxed);
     mActiveChain = Chain();
 }
 
@@ -43,7 +29,7 @@ void Sequencer::start() {
     // Reset step counter on start
     mLastStepSampleCounter.store(0, std::memory_order_relaxed);
     mCurrentStepIndex.store(0, std::memory_order_relaxed);
-    mPreviousStepIndex.store(0, std::memory_order_relaxed);
+    mPreviousStepIndex.store(MAX_STEPS, std::memory_order_relaxed);
     mLoopIteration.store(0, std::memory_order_relaxed);
 }
 
@@ -52,7 +38,10 @@ void Sequencer::stop() {
 }
 
 void Sequencer::loadPattern(const Pattern& pattern) {
-    mActivePattern = pattern;
+    uint32_t currentIndex = mActivePatternIndex.load(std::memory_order_acquire);
+    uint32_t nextIndex = 1 - currentIndex;
+    mPatternBuffers[nextIndex] = pattern;
+    mActivePatternIndex.store(nextIndex, std::memory_order_release);
     
     // Reset sequencer position
     mCurrentStepIndex.store(0, std::memory_order_relaxed);
@@ -86,17 +75,6 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
     
     // Safety check: null pointer validation (early return)
     if (!numTriggers || !triggers) {
-        // #region agent log
-        static int32_t nullPtrCount = 0;
-        nullPtrCount++;
-        if (nullPtrCount <= 5) {  // Log first 5 occurrences
-            FILE* logFile = fopen(getDebugLogPath(), "a");
-            if (logFile) {
-                fprintf(logFile, "{\"id\":\"sequencer_null_ptr_%d\",\"timestamp\":%ld,\"location\":\"Sequencer.cpp:70\",\"message\":\"Null pointer in sequencer update\",\"data\":{\"numTriggers\":%p,\"triggers\":%p},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"G\"}\n", nullPtrCount, (long)(time(nullptr) * 1000), (void*)numTriggers, (void*)triggers);
-                fclose(logFile);
-            }
-        }
-        // #endregion
         return;
     }
     
@@ -111,41 +89,21 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
     
     // Safety check: validate sample rate
     if (sampleRate <= 0.0) {
-        // #region agent log
-        static int32_t invalidSampleRateCount = 0;
-        invalidSampleRateCount++;
-        if (invalidSampleRateCount <= 5) {
-            FILE* logFile = fopen(getDebugLogPath(), "a");
-            if (logFile) {
-                fprintf(logFile, "{\"id\":\"invalid_sample_rate_%d\",\"timestamp\":%ld,\"location\":\"Sequencer.cpp:83\",\"message\":\"Invalid sample rate\",\"data\":{\"sampleRate\":%.2f},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H\"}\n", invalidSampleRateCount, (long)(time(nullptr) * 1000), sampleRate);
-                fclose(logFile);
-            }
-        }
-        // #endregion
         return;
     }
-    
+
+    const Pattern& pattern = mPatternBuffers[mActivePatternIndex.load(std::memory_order_acquire)];
+
     // Update samples per step (in case BPM changed)
     mSamplesPerStep = calculateSamplesPerStep(sampleRate);
     
     // Safety check: ensure samples per step is valid
     if (mSamplesPerStep <= 0.0) {
-        // #region agent log
-        static int32_t invalidSamplesPerStepCount = 0;
-        invalidSamplesPerStepCount++;
-        if (invalidSamplesPerStepCount <= 5) {
-            FILE* logFile = fopen(getDebugLogPath(), "a");
-            if (logFile) {
-                fprintf(logFile, "{\"id\":\"invalid_samples_per_step_%d\",\"timestamp\":%ld,\"location\":\"Sequencer.cpp:91\",\"message\":\"Invalid samples per step\",\"data\":{\"mSamplesPerStep\":%.2f,\"BPM\":%.2f,\"sampleRate\":%.2f},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"I\"}\n", invalidSamplesPerStepCount, (long)(time(nullptr) * 1000), mSamplesPerStep, mBPM, sampleRate);
-                fclose(logFile);
-            }
-        }
-        // #endregion
         return;
     }
     
     // Calculate current step
-    calculateCurrentStep(sampleCounter, sampleRate);
+    calculateCurrentStep(sampleCounter, sampleRate, pattern.lengthSteps);
     
     // Check if step changed
     bool stepChanged = hasStepChanged();
@@ -158,48 +116,14 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
     uint32_t loopIteration = mLoopIteration.load(std::memory_order_relaxed);
     
     // Safety check: ensure pattern is valid
-    if (mActivePattern.lengthSteps == 0 || mActivePattern.lengthSteps > MAX_STEPS) {
-        // #region agent log
-        static int32_t invalidPatternCount = 0;
-        invalidPatternCount++;
-        if (invalidPatternCount <= 5) {
-            FILE* logFile = fopen(getDebugLogPath(), "a");
-            if (logFile) {
-                fprintf(logFile, "{\"id\":\"invalid_pattern_%d\",\"timestamp\":%ld,\"location\":\"Sequencer.cpp:108\",\"message\":\"Invalid pattern length\",\"data\":{\"lengthSteps\":%u,\"MAX_STEPS\":%u},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"J\"}\n", invalidPatternCount, (long)(time(nullptr) * 1000), mActivePattern.lengthSteps, MAX_STEPS);
-                fclose(logFile);
-            }
-        }
-        // #endregion
+    if (pattern.lengthSteps == 0 || pattern.lengthSteps > MAX_STEPS) {
         return;
     }
     
     // Safety check: ensure current step is within valid range
-    if (currentStep >= mActivePattern.lengthSteps || currentStep >= MAX_STEPS) {
-        // #region agent log
-        static int32_t invalidStepIndexCount = 0;
-        invalidStepIndexCount++;
-        if (invalidStepIndexCount <= 5) {
-            FILE* logFile = fopen(getDebugLogPath(), "a");
-            if (logFile) {
-                fprintf(logFile, "{\"id\":\"invalid_step_index_%d\",\"timestamp\":%ld,\"location\":\"Sequencer.cpp:113\",\"message\":\"Invalid step index\",\"data\":{\"currentStep\":%u,\"lengthSteps\":%u,\"MAX_STEPS\":%u},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"K\"}\n", invalidStepIndexCount, (long)(time(nullptr) * 1000), currentStep, mActivePattern.lengthSteps, MAX_STEPS);
-                fclose(logFile);
-            }
-        }
-        // #endregion
+    if (currentStep >= pattern.lengthSteps || currentStep >= MAX_STEPS) {
         return;
     }
-    
-    // #region agent log
-    static int32_t stepChangeCount = 0;
-    stepChangeCount++;
-    if (stepChangeCount % 10 == 0 || stepChangeCount <= 5) {  // Log every 10th step change or first 5
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"step_changed_%d\",\"timestamp\":%ld,\"location\":\"Sequencer.cpp:116\",\"message\":\"Step changed\",\"data\":{\"currentStep\":%u,\"lengthSteps\":%u,\"loopIteration\":%u,\"sampleCounter\":%ld,\"mSamplesPerStep\":%.2f},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"L\"}\n", stepChangeCount, (long)(time(nullptr) * 1000), currentStep, mActivePattern.lengthSteps, loopIteration, sampleCounter, mSamplesPerStep);
-            fclose(logFile);
-        }
-    }
-    // #endregion
     
     constexpr uint32_t MAX_TRIGGERS = 16;  // Match MAX_TRIGGERS_PER_CALLBACK
     
@@ -216,7 +140,7 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
         }
         
         // Safety check: validate current step before array access
-        if (currentStep >= mActivePattern.lengthSteps || currentStep >= MAX_STEPS) {
+        if (currentStep >= pattern.lengthSteps || currentStep >= MAX_STEPS) {
             break;
         }
         
@@ -225,7 +149,7 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
         trigger.stepIndex = currentStep;
         
         // Get step data (now safe due to bounds checks above)
-        const StepData& step = mActivePattern.steps[partIndex][currentStep];
+        const StepData& step = pattern.steps[partIndex][currentStep];
         
         // Check gate
         if (step.gate == 0) {
@@ -235,7 +159,7 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
         }
         
         // Evaluate probability (deterministic!)
-        bool shouldStepTrigger = evaluateStepTrigger(partIndex, currentStep, loopIteration);
+        bool shouldStepTrigger = evaluateStepTrigger(pattern, partIndex, currentStep, loopIteration);
         
         if (shouldStepTrigger) {
             trigger.triggered = true;
@@ -252,27 +176,27 @@ void Sequencer::update(int64_t sampleCounter, double sampleRate, StepTrigger* tr
     mLastStepSampleCounter.store(sampleCounter, std::memory_order_relaxed);
 }
 
-bool Sequencer::evaluateStepTrigger(uint32_t partIndex, uint32_t stepIndex, uint32_t loopIteration) {
+bool Sequencer::evaluateStepTrigger(const Pattern& pattern, uint32_t partIndex, uint32_t stepIndex, uint32_t loopIteration) {
     // Safety check: validate part index
     if (partIndex >= NUM_PARTS) {
         return false;
     }
     
     // Safety check: validate pattern
-    if (mActivePattern.lengthSteps == 0 || mActivePattern.lengthSteps > MAX_STEPS) {
+    if (pattern.lengthSteps == 0 || pattern.lengthSteps > MAX_STEPS) {
         return false;
     }
     
     // Safety check: validate step index
-    if (stepIndex >= mActivePattern.lengthSteps || stepIndex >= MAX_STEPS) {
+    if (stepIndex >= pattern.lengthSteps || stepIndex >= MAX_STEPS) {
         return false;
     }
     
     // Get step data
-    const StepData& step = mActivePattern.steps[partIndex][stepIndex];
+    const StepData& step = pattern.steps[partIndex][stepIndex];
     
     // Evaluate probability (deterministic)
-    return shouldTrigger(step.probability, mActivePattern.patternSeed, stepIndex, loopIteration);
+    return shouldTrigger(step.probability, pattern.patternSeed, stepIndex, loopIteration);
 }
 
 int64_t Sequencer::applyMicrotiming(int64_t sampleCounter, int8_t microtiming, double sampleRate) {
@@ -286,7 +210,7 @@ int64_t Sequencer::applyMicrotiming(int64_t sampleCounter, int8_t microtiming, d
     return sampleCounter + clampedMicrotiming;
 }
 
-void Sequencer::calculateCurrentStep(int64_t sampleCounter, double sampleRate) {
+void Sequencer::calculateCurrentStep(int64_t sampleCounter, double sampleRate, uint32_t patternLength) {
     // Safety check: prevent division by zero
     if (mSamplesPerStep <= 0.0) {
         // Invalid samples per step - keep current step
@@ -294,7 +218,7 @@ void Sequencer::calculateCurrentStep(int64_t sampleCounter, double sampleRate) {
     }
     
     // Safety check: prevent division by zero for pattern length
-    if (mActivePattern.lengthSteps == 0) {
+    if (patternLength == 0) {
         // Invalid pattern length - reset to default
         mCurrentStepIndex.store(0, std::memory_order_relaxed);
         mLoopIteration.store(0, std::memory_order_relaxed);
@@ -305,15 +229,15 @@ void Sequencer::calculateCurrentStep(int64_t sampleCounter, double sampleRate) {
     int64_t totalSteps = static_cast<int64_t>(sampleCounter / mSamplesPerStep);
     
     // Calculate loop iteration
-    uint32_t loopIteration = static_cast<uint32_t>(totalSteps / mActivePattern.lengthSteps);
+    uint32_t loopIteration = static_cast<uint32_t>(totalSteps / patternLength);
     mLoopIteration.store(loopIteration, std::memory_order_relaxed);
     
     // Calculate step index within pattern
-    uint32_t stepIndex = static_cast<uint32_t>(totalSteps % mActivePattern.lengthSteps);
+    uint32_t stepIndex = static_cast<uint32_t>(totalSteps % patternLength);
     
     // Safety check: ensure step index is within valid range
-    if (stepIndex >= mActivePattern.lengthSteps) {
-        stepIndex = mActivePattern.lengthSteps - 1;
+    if (stepIndex >= patternLength) {
+        stepIndex = patternLength - 1;
     }
     
     // Additional safety: clamp to MAX_STEPS

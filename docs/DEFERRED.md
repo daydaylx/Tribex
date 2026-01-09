@@ -1,253 +1,113 @@
-# TribeX Deferred Features
+# TribeX  Deferred Features
 
-This document tracks features that have been intentionally deferred to future milestones. Each entry must include:
-- Description of feature
-- Reason for deferral
-- Target milestone (if known)
+This document tracks features intentionally deferred to future milestones. All deferred features must have a clear rationale and a planned milestone.
 
-## QA AUDIT Deferred Items (08.01.2026)
+## M9: Landscape Orientation
 
-### SAMPLE Screen Full Implementation
-- **Description**: SampleScreen.kt contains only placeholder text, no functional implementation
-  - No sample browser
-  - No sample loading from storage
-  - No sample metadata display
-  - No waveform preview
-  - No trim/loop points
-- **Reason**: Per project QA rules - no new features in QA phase, only bugfixes and stability
-- **Target**: M7 (per SPEC v3.1 requirements)
+### SAMPLE Screen - Deferred Features
 
-### Master FX Section UI Implementation
-- **Description**: Master FX Section in SoundScreen.kt is placeholder only
-  - No parameter controls for Valve Saturation, Limiter, Delay, Reverb
-  - Placeholder text: "(M5: Placeholder - will be implemented in future milestone)"
-- **Reason**: Per project QA rules - no new features in QA phase
-- **Target**: M7
+**Waveform Preview**
+- **Status**: Layout prepared, implementation deferred to M10
+- **Reason**: Focus of M9 is landscape layout adaptation. Waveform rendering requires:
+  - Native audio sample data access
+  - Canvas-based waveform drawing at 60fps
+  - Zoom/pan gesture handling
+  - Performance optimization for large samples
+- **Planned Implementation**: M10 with Canvas-based waveform component
 
-### Pattern Running Light Synchronization
-- **Description**: Pattern running light uses System.currentTimeMillis() instead of audio state
-  - Current implementation: `val currentStep = (System.currentTimeMillis() / 250).toUInt() % 16u`
-  - Spec violation: "UI shows Audio-State, not Input-State"
-  - Running light may drift from actual sequencer position
-- **Reason**: Requires JNI methods for sequencer state polling (getCurrentStep, isPlaying, etc.)
-- **Target**: M7 (requires JNI bridge implementation)
+**Trim/Loop Controls**
+- **Status**: UI placeholder in place, functionality deferred to M10
+- **Reason**: Depends on waveform preview component. Trim requires:
+  - Visual start/end markers on waveform
+  - Touch drag interaction for trim points
+  - Loop region visualization
+  - Audio engine integration for trimmed playback
+- **Planned Implementation**: M10 with interactive trim/loop UI
 
-### KSP Version Upgrade
-- **Description**: KSP version 1.9.20-1.0.14 incompatible with Kotlin 1.9.22
-  - Build succeeds with warnings
-  - Should upgrade to 1.9.22-1.0.18 or newer
-- **Reason**: Non-blocking issue, not a critical bug
-- **Target**: M7 (maintenance update)
+**Sample Metadata Editing**
+- **Status**: Read-only display implemented
+- **Reason**: Not critical for M9 layout focus. Deferred features:
+  - Editable sample name
+  - BPM detection/display
+  - Key/root note assignment
+  - One-shot vs loop mode toggle
+- **Planned Implementation**: M11 or later
 
-### Compose Divider API Update
-- **Description**: Divider deprecated in favor of HorizontalDivider
-  - Used in: SampleBrowser.kt, SampleScreen.kt, PatternScreen.kt, SoundScreen.kt
-  - Functional but deprecated
-- **Reason**: Non-blocking issue, API still works
-- **Target**: M7 (maintenance update)
+**Sample Import/Export**
+- **Status**: Not implemented
+- **Reason**: Requires file system access and sample loader integration:
+  - File picker for importing external samples
+  - Export sample to device storage
+  - Sample format conversion (if needed)
+  - Error handling for invalid formats
+- **Planned Implementation**: M11 or later
 
-## M8 Deferred Items
+## Previous Deferred Items (Archived)
 
-### Pattern/Part Persistence to Room
-- **Description**: UI doesn't read/write patterns and part settings from Room
-  - PATTERN screen uses in-memory state only
-  - SOUND screen doesn't save parameters to Room
-  - SAMPLE screen doesn't save samples to Room + filesystem
-- **Reason**: M8 focused on persistence infrastructure (Room, ProjectManager)
-- **Target**: M9 (UI Integration)
+### M8: Persistence (Implemented)
+- [x] Project save/load - Implemented in M8
+- [x] Autosave on screen change - Implemented in M8
+- [x] Autosave on app pause/background - Implemented in M8
+- [x] SQLite database with Room - Implemented in M8
+- [x] Atomic save with temp backup - Implemented in M8
 
-### Sample File Persistence
-- **Description**: Sample files are saved to filesystem but not linked to Room
-  - Audio data exists only in memory (AudioEngine)
-  - No WAV file creation in project samples/ directory
-  - No Sample entity insertion
-- **Reason**: M8 focused on database infrastructure; sample I/O integration deferred
-- **Target**: M9 (UI Integration)
+### M7: Offline Export (Implemented)
+- [x] C++ offline renderer - Implemented in M7
+- [x] WAV export at 44.1kHz/16-bit - Implemented in M7
+- [x] Determinism (Export == Live) - Implemented in M7
+- [x] JNI bridge for export - Deferred to M8 (UI integration)
 
-### Versioned Room Migrations
-- **Description**: Only destructive migration (fallbackToDestructiveMigration) implemented
-  - Schema changes will delete all data
-  - No incremental migration support
-- **Reason**: Simple for M8; versioned migrations require more complex logic
-- **Target**: Later milestone (when schema stabilizes)
+### M6: FX Implementation (Implemented)
+- [x] Delay Effect - Implemented in M6
+- [x] Reverb Effect - Implemented in M6
+- [x] Valve Saturation - Implemented in M6
+- [x] Limiter - Implemented in M6
+- [x] FX Manager - Implemented in M6
 
-### Project Selection UI
-- **Description**: No UI for selecting/loading projects
-  - Always loads last project or creates new one
-  - No project list screen
-  - No project creation dialog
-- **Reason**: M8 focused on backend infrastructure
-- **Target**: M9 (UI Integration)
+### M5: UI Structure (Implemented)
+- [x] Navigation between screens - Implemented in M5
+- [x] PATTERN Screen layout - Implemented in M5
+- [x] SOUND Screen layout - Implemented in M5
+- [x] SAMPLE Screen placeholder - Implemented in M5
 
-### Project Export/Import
-- **Description**: No project export/import functionality
-  - Can't share projects with other devices
-  - Can't backup/restore projects
-- **Reason**: M8 focused on local persistence only
-- **Target**: Later milestone (maybe M10 or after)
+### M4: Audio Integration (Implemented)
+- [x] Part mute/solo - Implemented in M4
+- [x] Part pan - Implemented in M4
+- [x] Voice level per part - Implemented in M4
+- [x] Voice decay per part - Implemented in M4
+- [x] Filter per drum part - Implemented in M4
 
-### Project Backup/Restore
-- **Description**: No backup functionality
-  - Can't create project backups
-  - No automatic backup system
-- **Reason**: M8 focused on basic persistence
-- **Target**: Later milestone
+### M3: Pattern Screen (Implemented)
+- [x] Step grid UI - Implemented in M3
+- [x] Part selection - Implemented in M3
+- [x] Page navigation (16-64 steps) - Implemented in M3
+- [x] BPM display - Implemented in M3
+- [x] Transport controls - Implemented in M3
 
-### Room Schema Export
-- **Description**: Schema export configured but not used
-  - `room.schemaLocation` set to `$projectDir/schemas`
-  - Schema files not committed to repo
-  - Not used for migration testing
-- **Reason**: Schema tracking useful but not critical for M8
-- **Target**: M9 or later (when migrations are implemented)
+## Future Milestone Planning
 
-### Pattern Steps Optimization
-- **Description**: Pattern steps stored as JSON string
-  - `steps: String = "{}"`
-  - Parsing overhead on load
-  - Not type-safe
-- **Reason**: Simple for M8; future optimization with custom converters or serialization
-- **Target**: M9 or later
+### M10: SAMPLE Screen Implementation
+- Waveform preview component (Canvas-based)
+- Trim/loop controls with visual markers
+- Sample assignment to drum parts
+- Sample metadata editing
+- Basic sample import from device storage
 
-### Waveform Blob Storage
-- **Description**: Waveform data stored as ByteArray blob
-  - Max 1000 points (4KB)
-  - Stored in database (not filesystem)
-  - May cause database bloat with many samples
-- **Reason**: Simple for M8; could optimize to filesystem storage
-- **Target**: Later milestone (performance optimization)
+### M11: Advanced SAMPLE Features
+- Sample library management
+- Sample export to device storage
+- Sample format conversion
+- BPM detection
+- Key/root note assignment
 
+### M12: Pattern Chain
+- Chain multiple patterns
+- Pattern transition controls
+- Song length configuration
 
-## M7 Deferred Items
+## Notes for Future Development
 
-### JNI Bridge for Export
-- **Description**: Export JNI methods not implemented
-  - `Java_com_tribex_groovebox_engine_AudioEngineBridge_startExport()`
-  - `Java_com_tribex_groovebox_engine_AudioEngineBridge_stopExport()`
-  - `Java_com_tribex_groovebox_engine_AudioEngineBridge_getExportProgress()`
-  - File path handling via JNI strings
-- **Reason**: M7 scope focused on C++ implementation only
-- **Target**: M8 or later
-
-### Kotlin Export UI
-- **Description**: Export UI not implemented
-  - Export button in PatternScreen or SoundScreen
-  - File selection via Storage Access Framework
-  - Progress display (0% to 100%)
-  - Export status (Running, Success, Error)
-  - Cancel export functionality
-- **Reason**: UI work deferred to keep M7 focused on audio engine
-- **Target**: M8 or later
-
-### Pattern Chain Duration Calculation
-- **Description**: Not implemented
-  - Calculate total frames from active pattern chain
-  - Consider repeat counts
-  - Consider BPM
-  - Currently using placeholder 60 seconds
-- **Reason**: Requires pattern chain data structure and management UI
-- **Target**: M8 or later
-
-### Export Cancel
-- **Description**: Stop functionality exists but UI not connected
-  - `stopExport()` implemented in C++
-  - Cancel button not added to UI
-  - Progress callback not wired to UI
-- **Reason**: UI work deferred
-- **Target**: M8 or later
-
-### Progress Reporting
-- **Description**: Callback exists but UI integration missing
-  - Progress callback implemented in OfflineRenderer
-  - StateFlow updates not implemented in Kotlin
-- **Reason**: UI work deferred
-- **Target**: M8 or later
-
-### File Path Management
-- **Description**: User file selection not implemented
-  - Export to app-internal storage (temporary)
-  - Storage Access Framework integration deferred
-  - User-specified filename not supported
-- **Reason**: File I/O UI work deferred
-- **Target**: M8 or later
-
-## M4.5 Deferred Items
-
-### Trim Persistence
-- **Description**: Trim values (startOffset/endOffset) are not persisted to storage
-- **Reason**: M4.5 focused on UI implementation; persistence is part of M6 (Project Save/Load)
-- **Target**: M6
-
-### Trim JNI Bridge
-- **Description**: Trim updates from UI are not sent to AudioEngine via JNI
-- **Reason**: M4.5 implemented UI-only trim; full integration requires JNI bridge updates
-- **Target**: M4.6 (hotfix) or M5
-
-### Waveform Cache
-- **Description**: Waveform data is recalculated on each sample reload
-- **Reason**: Acceptable for M4.5; caching would add complexity
-- **Target**: M6 (Project Save/Load with sample metadata caching)
-
-### Trim Slider Touch Handling
-- **Description**: TrimSlider component is visual-only using RangeSlider
-- **Reason**: Full touch handling with drag gestures would require custom implementation
-- **Target**: M5 (UI polish) or later
-
-### Sample Preview Playback
-- **Description**: No audio preview when browsing samples
-- **Reason**: Requires additional voice management and UI integration
-- **Target**: M5 or later
-
-## M5 Deferred Items
-
-### Advanced Filters
-- **Status**: M5
-- **Reason**: M4 only requires basic LPF/HPF
-- **Current State**: 1-pole LPF/HPF (no resonance, fixed cutoff)
-- **Deferred**:
-  - Biquad filter implementation
-  - Resonance/Q control
-  - Cutoff frequency control
-  - More filter types (band-pass, notch)
-
-### Stereo Sample Support
-- **Status**: Beyond M5
-- **Reason**: Mono-only for M4 specification
-- **Current State**: Mono-only playback
-- **Deferred**:
-  - Stereo sample loading
-  - Stereo-to-mono downmix option
-  - Independent left/right panning
-
-## Later Milestones
-
-### Sample Editing
-- **Status**: Beyond M5
-- **Reason**: Not in current scope
-- **Deferred**: Reverse, normalize, fade in/out
-
-### Sample Library
-- **Status**: M6
-- **Reason**: Requires persistent storage (deferred per spec)
-- **Deferred**: 
-  - Sample database (SQLite/Room)
-  - Tagging/categorization
-  - Search/filter functionality
-  - Filesystem storage layout
-
-### Advanced Voice Management
-- **Status**: Beyond M5
-- **Reason**: Basic polyphony sufficient for M4
-- **Deferred**:
-  - Voice priority settings
-  - Voice stealing strategies (newest-first, etc.)
-  - Per-part voice count limits
-
-### Sample Mapping
-- **Status**: Beyond M4.5
-- **Reason**: Current implementation auto-assigns to first empty part
-- **Current State**: Auto-assignment to first empty part
-- **Deferred**: 
-  - Manual part selection
-  - Drag-and-drop sample to part
-  - Sample library with drag support
+- **Performance Priority**: Waveform rendering must maintain 60fps. Consider caching or downsampling for large samples.
+- **Touch Targets**: All trim/loop controls must be >= 44dp for accessibility.
+- **Offline First**: No cloud features per SPEC v3.1.
+- **No TODOs in Code**: All deferred items must be documented here, not as TODO comments.

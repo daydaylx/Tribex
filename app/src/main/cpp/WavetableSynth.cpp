@@ -193,12 +193,22 @@ float WavetableSynthVoice::readWavetable(float phase) {
 }
 
 float WavetableSynthVoice::updateADSR(float dt) {
-    const float attackRate = 1.0f / mAttack;
-    const float decayRate = (1.0f - mSustain) / mDecay;
-    const float releaseRate = 1.0f / mRelease;
+    const float attack = mAttack;
+    const float decay = mDecay;
+    const float release = mRelease;
+    const float sustain = mSustain;
+
+    const float attackRate = (attack > 0.0f) ? (1.0f / attack) : 0.0f;
+    const float decayRate = (decay > 0.0f) ? ((1.0f - sustain) / decay) : 0.0f;
+    const float releaseRate = (release > 0.0f) ? (1.0f / release) : 0.0f;
     
     switch (mADSRState) {
         case ADSRState::ATTACK:
+            if (attack <= 0.0f) {
+                mEnvelope = 1.0f;
+                mADSRState = ADSRState::DECAY;
+                break;
+            }
             mEnvelope += attackRate * dt;
             if (mEnvelope >= 1.0f) {
                 mEnvelope = 1.0f;
@@ -207,9 +217,14 @@ float WavetableSynthVoice::updateADSR(float dt) {
             break;
             
         case ADSRState::DECAY:
+            if (decay <= 0.0f) {
+                mEnvelope = sustain;
+                mADSRState = ADSRState::SUSTAIN;
+                break;
+            }
             mEnvelope -= decayRate * dt;
-            if (mEnvelope <= mSustain) {
-                mEnvelope = mSustain;
+            if (mEnvelope <= sustain) {
+                mEnvelope = sustain;
                 mADSRState = ADSRState::SUSTAIN;
             }
             break;
@@ -219,6 +234,11 @@ float WavetableSynthVoice::updateADSR(float dt) {
             break;
             
         case ADSRState::RELEASE:
+            if (release <= 0.0f) {
+                mEnvelope = 0.0f;
+                mADSRState = ADSRState::IDLE;
+                break;
+            }
             mEnvelope -= releaseRate * dt;
             if (mEnvelope <= 0.0f) {
                 mEnvelope = 0.0f;
@@ -292,30 +312,41 @@ void WavetableSynthVoice::setPitch(float semitones) {
 }
 
 void WavetableSynthVoice::setCutoff(float normalizedCutoff) {
+    if (normalizedCutoff < 0.0f) normalizedCutoff = 0.0f;
+    if (normalizedCutoff > 1.0f) normalizedCutoff = 1.0f;
     mCutoff = normalizedCutoff;
 }
 
 void WavetableSynthVoice::setResonance(float resonance) {
+    if (resonance < 0.0f) resonance = 0.0f;
+    if (resonance > 1.0f) resonance = 1.0f;
     mResonance = resonance;
 }
 
 void WavetableSynthVoice::setAmplitude(float amplitude) {
+    if (amplitude < 0.0f) amplitude = 0.0f;
+    if (amplitude > 1.0f) amplitude = 1.0f;
     mAmplitude = amplitude;
 }
 
 void WavetableSynthVoice::setAttack(float attackMs) {
+    if (attackMs < 0.0f) attackMs = 0.0f;
     mAttack = attackMs / 1000.0f;  // Convert to seconds
 }
 
 void WavetableSynthVoice::setDecay(float decayMs) {
+    if (decayMs < 0.0f) decayMs = 0.0f;
     mDecay = decayMs / 1000.0f;
 }
 
 void WavetableSynthVoice::setSustain(float sustainLevel) {
+    if (sustainLevel < 0.0f) sustainLevel = 0.0f;
+    if (sustainLevel > 1.0f) sustainLevel = 1.0f;
     mSustain = sustainLevel;
 }
 
 void WavetableSynthVoice::setRelease(float releaseMs) {
+    if (releaseMs < 0.0f) releaseMs = 0.0f;
     mRelease = releaseMs / 1000.0f;
 }
 

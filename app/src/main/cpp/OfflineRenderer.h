@@ -8,10 +8,11 @@
 #include <thread>
 #include "WavWriter.h"
 
+class AudioEngine;
+
 namespace Tribex {
 
 // Forward declarations
-class AudioEngine;
 class Pattern;
 class Chain;
 
@@ -38,7 +39,7 @@ public:
      * Set the audio engine to use for rendering
      * Must be called before starting export
      */
-    void setAudioEngine(AudioEngine* engine);
+    void setAudioEngine(::AudioEngine* engine);
 
     /**
      * Start offline export
@@ -78,6 +79,11 @@ public:
      */
     const std::string& getErrorMessage() const { return mErrorMessage; }
 
+    /**
+     * Get current export progress (0.0 to 1.0)
+     */
+    float getProgress() const { return mProgress.load(); }
+
 private:
     // Render thread function
     void renderThreadFunc(const std::string& filename,
@@ -91,12 +97,13 @@ private:
                    int32_t sampleRate);
 
     // Audio engine reference
-    AudioEngine* mAudioEngine;
+    ::AudioEngine* mAudioEngine;
 
     // Export state
     std::atomic<bool> mIsExporting;
     std::atomic<bool> mStopRequested;
     std::atomic<bool> mExportResult;
+    std::atomic<float> mProgress;
     std::string mErrorMessage;
 
     // Render thread

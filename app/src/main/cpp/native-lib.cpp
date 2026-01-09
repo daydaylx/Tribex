@@ -4,137 +4,17 @@
 #include <android/log.h>
 #include <memory>
 #include <string>
-#include <cstdio>
-#include <ctime>
 
 #define TAG "NativeLib"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 // Global audio engine instance
-// Note: In production, this should be managed more carefully
 std::unique_ptr<AudioEngine> gAudioEngine;
 
-// P1.2: Global offline renderer instance
+// Global offline renderer instance
 std::unique_ptr<Tribex::OfflineRenderer> gOfflineRenderer;
 
-// Debug log file path (set from Kotlin via JNI)
-static std::string gDebugLogPath = "/data/data/com.tribex.groovebox/files/debug.log";
-
-// Helper function to get log file path
-const char* getDebugLogPath() {
-    return gDebugLogPath.c_str();
-}
-
 extern "C" {
-
-// Forward declaration
-extern "C" void setDebugLogPathNative(const char* path);
-
-// JNI method to set debug log path from Kotlin
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_engine_AudioEngineBridge_setDebugLogPath(JNIEnv *env, jobject thiz, jstring path) {
-    const char* pathStr = env->GetStringUTFChars(path, nullptr);
-    if (pathStr) {
-        gDebugLogPath = std::string(pathStr);
-        // Update all modules
-        setDebugLogPathNative(pathStr);
-        env->ReleaseStringUTFChars(path, pathStr);
-    }
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeStartAudioEngine(JNIEnv *env, jobject thiz) {
-    LOGI("nativeStartAudioEngine called");
-    
-    if (!gAudioEngine) {
-        gAudioEngine = std::make_unique<AudioEngine>();
-    }
-    
-    return static_cast<jboolean>(gAudioEngine->start());
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeStopAudioEngine(JNIEnv *env, jobject thiz) {
-    LOGI("nativeStopAudioEngine called");
-    
-    if (!gAudioEngine) {
-        return JNI_TRUE; // Already stopped
-    }
-    
-    return static_cast<jboolean>(gAudioEngine->stop());
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeIsPlaying(JNIEnv *env, jobject thiz) {
-    if (!gAudioEngine) {
-        return JNI_FALSE;
-    }
-    
-    return static_cast<jboolean>(gAudioEngine->isPlaying());
-}
-
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeCleanup(JNIEnv *env, jobject thiz) {
-    LOGI("nativeCleanup called");
-    
-    if (gAudioEngine) {
-        gAudioEngine->stop();
-        gAudioEngine.reset();
-    }
-}
-
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_MainActivity_toggleNativeAudio(JNIEnv *env, jobject thiz) {
-    LOGI("toggleNativeAudio called");
-    
-    if (!gAudioEngine) {
-        gAudioEngine = std::make_unique<AudioEngine>();
-    }
-    
-    if (gAudioEngine->isPlaying()) {
-        gAudioEngine->stop();
-    } else {
-        gAudioEngine->start();
-    }
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_tribex_groovebox_MainActivity_isNativePlaying(JNIEnv *env, jobject thiz) {
-    if (!gAudioEngine) {
-        return JNI_FALSE;
-    }
-    
-    return static_cast<jboolean>(gAudioEngine->isPlaying());
-}
-
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeSetMasterGain(JNIEnv *env, jobject thiz, jfloat gain) {
-    if (gAudioEngine) {
-        gAudioEngine->setMasterGain(gain);
-    }
-}
-
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeSetMasterPan(JNIEnv *env, jobject thiz, jfloat pan) {
-    if (gAudioEngine) {
-        gAudioEngine->setMasterPan(pan);
-    }
-}
-
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeSetTestToneFrequency(JNIEnv *env, jobject thiz, jfloat freq) {
-    if (gAudioEngine) {
-        gAudioEngine->setTestToneFrequency(freq);
-    }
-}
-
-JNIEXPORT void JNICALL
-Java_com_tribex_groovebox_MainActivity_nativeClearEvents(JNIEnv *env, jobject thiz) {
-    if (gAudioEngine) {
-        gAudioEngine->clearEvents();
-    }
-}
 
 // AudioEngineBridge: Core engine control methods
 
@@ -250,27 +130,11 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_isSequencerPlaying(JNIEnv *en
 
 JNIEXPORT jint JNICALL
 Java_com_tribex_groovebox_engine_AudioEngineBridge_getCurrentStep(JNIEnv *env, jobject thiz) {
-    // #region agent log
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"get_step_%ld\",\"timestamp\":%ld,\"location\":\"native-lib.cpp:227\",\"message\":\"getCurrentStep called\",\"data\":{\"gAudioEngine\":%p},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\"}\n", (long)time(nullptr), (long)(time(nullptr) * 1000), (void*)gAudioEngine.get());
-        fclose(logFile);
-    }
-    // #endregion
-    
     if (!gAudioEngine) {
         return 0;
     }
     
     uint32_t step = gAudioEngine->getCurrentStep();
-    
-    // #region agent log
-        FILE* logFile2 = fopen(getDebugLogPath(), "a");
-    if (logFile2) {
-        fprintf(logFile2, "{\"id\":\"get_step_result_%ld\",\"timestamp\":%ld,\"location\":\"native-lib.cpp:232\",\"message\":\"getCurrentStep result\",\"data\":{\"step\":%u},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\"}\n", (long)time(nullptr), (long)(time(nullptr) * 1000), step);
-        fclose(logFile2);
-    }
-    // #endregion
     
     return static_cast<jint>(step);
 }
@@ -291,14 +155,6 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_setPattern(JNIEnv *env, jobje
                                                                 jbyteArray patternData,
                                                                 jint patternLength,
                                                                 jint patternSeed) {
-    // #region agent log
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"set_pattern_%ld\",\"timestamp\":%ld,\"location\":\"native-lib.cpp:245\",\"message\":\"setPattern called\",\"data\":{\"patternLength\":%d,\"patternSeed\":%d,\"gAudioEngine\":%p},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"F\"}\n", (long)time(nullptr), (long)(time(nullptr) * 1000), patternLength, patternSeed, (void*)gAudioEngine.get());
-        fclose(logFile);
-    }
-    // #endregion
-    
     if (!gAudioEngine) {
         LOGE("Audio engine not initialized");
         return;
@@ -384,8 +240,18 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_setPattern(JNIEnv *env, jobje
             }
         }
         
-        LOGI("Pattern parsed: id=%u, length=%u, seed=%u, dataLength=%d", 
-             patternObj.id, patternObj.lengthSteps, patternObj.patternSeed, dataLength);
+        // Count active steps for debugging
+        uint32_t activeSteps = 0;
+        for (uint32_t part = 0; part < Tribex::NUM_PARTS; part++) {
+            for (uint32_t step = 0; step < patternObj.lengthSteps && step < Tribex::MAX_STEPS; step++) {
+                if (patternObj.steps[part][step].gate != 0) {
+                    activeSteps++;
+                }
+            }
+        }
+        
+        LOGI("Pattern parsed: id=%u, length=%u, seed=%u, dataLength=%d, activeSteps=%u", 
+             patternObj.id, patternObj.lengthSteps, patternObj.patternSeed, dataLength, activeSteps);
     } else {
         LOGE("Pattern data too short: %d bytes, expected at least %d bytes", dataLength, expectedDataSize);
     }
@@ -432,15 +298,6 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_loadSample(JNIEnv *env, jobje
     // Create SampleData structure
     Tribex::SampleData sample;
     sample.data = floatData;
-    
-    // #region agent log
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-    if (logFile) {
-        uint32_t calculatedLength = static_cast<uint32_t>(length / sizeof(float));
-        fprintf(logFile, "{\"id\":\"load_sample_%ld\",\"timestamp\":%ld,\"location\":\"native-lib.cpp:278\",\"message\":\"loadSample calculation\",\"data\":{\"length\":%d,\"sizeofFloat\":%zu,\"calculatedLength\":%u,\"partIndex\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\"}\n", (long)time(nullptr), (long)(time(nullptr) * 1000), length, sizeof(float), calculatedLength, partIndex);
-        fclose(logFile);
-    }
-    // #endregion
     
     // Safety check: ensure length is divisible by sizeof(float)
     if (length % sizeof(float) != 0) {
@@ -557,6 +414,23 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_setVoiceFilter(JNIEnv *env, j
         : Tribex::FilterType::LP;
     
     gAudioEngine->setVoiceFilter(static_cast<uint32_t>(partIndex), filter);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tribex_groovebox_engine_AudioEngineBridge_setVoiceTrim(JNIEnv *env, jobject thiz, 
+                                                          jint partIndex, jint startOffset, jint endOffset) {
+    if (!gAudioEngine) {
+        return;
+    }
+    
+    if (partIndex < 0 || partIndex >= Tribex::NUM_PARTS) {
+        LOGE("Invalid part index: %d", partIndex);
+        return;
+    }
+    
+    gAudioEngine->setVoiceTrim(static_cast<uint32_t>(partIndex), 
+                              static_cast<uint32_t>(startOffset), 
+                              static_cast<uint32_t>(endOffset));
 }
 
 JNIEXPORT void JNICALL
@@ -841,19 +715,8 @@ Java_com_tribex_groovebox_engine_AudioEngineBridge_stopExport(JNIEnv *env, jobje
 
 JNIEXPORT jfloat JNICALL
 Java_com_tribex_groovebox_engine_AudioEngineBridge_getExportProgress(JNIEnv *env, jobject thiz) {
-    // #region agent log
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-    if (logFile) {
-        bool isExporting = gOfflineRenderer && gOfflineRenderer->isExporting();
-        fprintf(logFile, "{\"id\":\"export_progress_%ld\",\"timestamp\":%ld,\"location\":\"native-lib.cpp:669\",\"message\":\"getExportProgress called\",\"data\":{\"gOfflineRenderer\":%p,\"isExporting\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\"}\n", (long)time(nullptr), (long)(time(nullptr) * 1000), (void*)gOfflineRenderer.get(), isExporting ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
-    
-    // TODO: Implement progress tracking in OfflineRenderer
-    // For now, return 0.0 if not exporting, 0.5 if exporting (placeholder)
-    if (gOfflineRenderer && gOfflineRenderer->isExporting()) {
-        return 0.5f;  // Placeholder
+    if (gOfflineRenderer) {
+        return gOfflineRenderer->getProgress();
     }
     return 0.0f;
 }

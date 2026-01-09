@@ -4,6 +4,8 @@
 #include "SampleVoice.h"
 #include <cstdint>
 #include <atomic>
+#include <vector>
+#include <mutex>
 
 namespace Tribex {
 
@@ -68,8 +70,9 @@ public:
     ~SamplePart();
     
     // Lifecycle
-    void loadSample(const SampleData& sample);
-    void unloadSample();
+    void loadSample(const SampleData& sample, bool deferFree = false);
+    void unloadSample(bool deferFree = false);
+    void releaseRetiredSamples();
     
     // Trigger voice (called from sequencer)
     // Returns false if no sample loaded
@@ -97,6 +100,9 @@ public:
     void setMute(bool muted) { mMuted.store(muted, std::memory_order_relaxed); }
     void setSolo(bool solo) { mSoloed.store(solo, std::memory_order_relaxed); }
     
+    // M10: Set sample trim range
+    void setTrim(uint32_t startOffset, uint32_t endOffset);
+    
     // M6: Set max voices for performance degradation (1-4)
     void setMaxVoices(uint32_t maxVoices);
     
@@ -121,10 +127,14 @@ private:
     
     // Current sample data (owned by part)
     SampleData mSample;
+    std::vector<float*> mRetiredSamples;
+    std::mutex mRetiredSamplesMutex;
     
     // Sample loaded flag (atomic)
     std::atomic<bool> mSampleLoaded;
     std::atomic<uint32_t> mSampleId;
+    std::atomic<uint32_t> mStartOffset;
+    std::atomic<uint32_t> mEndOffset;
     
     // Mute/Solo state (M4: UI only)
     std::atomic<bool> mMuted;
@@ -134,7 +144,7 @@ private:
     std::atomic<int64_t> mFrameCounter;
     
     // M6: Max voices for performance degradation
-    uint32_t mMaxVoices;
+    std::atomic<uint32_t> mMaxVoices;
 };
 
 } // namespace Tribex

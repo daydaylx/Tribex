@@ -7,14 +7,15 @@
  * - AudioEngine: fixed buffer allocation, no dynamic allocations in render path
  */
 
-#include "../main/cpp/AudioEngine.h"
-#include "../main/cpp/EventQueue.h"
-#include "../main/cpp/Probability.h"
-#include "../main/cpp/Sequencer.h"
-#include "../main/cpp/PatternData.h"
-#include "../main/cpp/SamplePart.h"
-#include "../main/cpp/SynthPart.h"
+#include "AudioEngine.h"
+#include "EventQueue.h"
+#include "Probability.h"
+#include "Sequencer.h"
+#include "PatternData.h"
+#include "SamplePart.h"
+#include "SynthPart.h"
 #include <cassert>
+#include <cstdlib>
 #include <cstdint>
 #include <iostream>
 
@@ -521,7 +522,7 @@ bool testHashDistribution() {
     
     for (uint32_t i = 0; i < 4; i++) {
         int32_t diff = static_cast<int32_t>(counts[i]) - static_cast<int32_t>(expected);
-        if (abs(diff) > static_cast<int32_t>(tolerance)) {
+        if (std::abs(diff) > static_cast<int32_t>(tolerance)) {
             std::cout << "  WARNING: Bucket " << i << " has " << counts[i] 
                       << " samples (expected ~" << expected << ")" << std::endl;
             // Not failing, just warning for sanity check

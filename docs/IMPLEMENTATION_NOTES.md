@@ -1,5 +1,35 @@
 # TribeX Implementation Notes
 
+## M9.x: Native Tests + UI Cleanup (2026-01-09)
+
+### Summary
+- Added host-native Sequencer tests (CMake/CTest) and Gradle :app:nativeTest
+- Sequencer start now forces first-step trigger by resetting previous step to MAX_STEPS
+- Fixed Compose warnings (Divider deprecation, GlobalScope, unused code)
+- Added Kotlin unit tests for sequencer models, trim, and clamp helpers
+- Fixed OfflineRenderer AudioEngine pointer namespace mismatch (restores Android build)
+- Added Cline MCP config (.cline/mcp.json) for filesystem/git servers
+
+### Build/Test
+- `./gradlew :app:assembleDebug` (SUCCESS)
+- `./gradlew test` (SUCCESS)
+- `./gradlew :app:nativeTest` (SUCCESS)
+
+## M9.x: Stability Fixes (2026-01-09)
+
+### Summary
+- Removed audio-thread file I/O/logging in AudioEngine::onAudioReady and Sequencer::update
+- Made pattern swaps thread-safe via double-buffered patterns (atomic index)
+- DelayEffect: fixed circular buffer wrap and sample-rate-aware time conversion
+- Sample import: downmix stereo to mono, correct duration/endOffset, and clamp trim bounds
+- Added WavParser unit tests (parse + stereo downmix)
+- Synth ADSR: guard zero times and clamp parameter ranges
+- Export progress: added tracking in OfflineRenderer and JNI getter
+- SamplePart max voices now atomic; output channel guard in AudioEngine
+
+### Build/Test
+- `./gradlew test` (SUCCESS; warnings only)
+
 ## M4.5: Trim UI, Waveform Preview, Solo Logic (08.01.2026)
 
 ### Summary
@@ -44,11 +74,11 @@
   - Rationale: AAudio direct support (99%+ device coverage)
   - Eliminates OpenSL ES fallback complexity
 - **Dependencies Updated**:
-  - Compose BOM: 2023.10.01 ’ 2024.02.01
-  - Compose Compiler: 1.4.8 ’ 1.5.4
-  - Lifecycle: 2.6.2 ’ 2.7.0
-  - Activity Compose: 1.8.1 ’ 1.8.2
-- **Version**: 0.1.0 ’ 0.2.0
+  - Compose BOM: 2023.10.01 ï¿½ 2024.02.01
+  - Compose Compiler: 1.4.8 ï¿½ 1.5.4
+  - Lifecycle: 2.6.2 ï¿½ 2.7.0
+  - Activity Compose: 1.8.1 ï¿½ 1.8.2
+- **Version**: 0.1.0 ï¿½ 0.2.0
 
 ### Unit Tests (M4.5)
 - **AudioEngineTest.cpp**: New test suite

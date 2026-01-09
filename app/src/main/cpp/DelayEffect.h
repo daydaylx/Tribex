@@ -17,6 +17,7 @@ public:
     void setTimeMs(float timeMs);  // 0 - 1000ms
     void setFeedback(float feedback); // 0.0 - 0.95
     void setMix(float mix);          // 0.0 - 1.0 (Dry/Wet)
+    void setSampleRate(float sampleRate);
 
     // Process audio (realtime, no allocations!)
     void process(float* leftIn, float* rightIn, float* leftOut, float* rightOut, int32_t numFrames);
@@ -31,7 +32,6 @@ public:
 private:
     // Delay buffer (preallocated, max 2 seconds at 48kHz)
     static constexpr int32_t MAX_DELAY_SAMPLES = 96000;  // 2000ms at 48kHz
-    static constexpr int32_t WRITE_HEAD_MASK = MAX_DELAY_SAMPLES - 1;
     std::array<float, MAX_DELAY_SAMPLES> mDelayBufferLeft;
     std::array<float, MAX_DELAY_SAMPLES> mDelayBufferRight;
 
@@ -40,6 +40,8 @@ private:
 
     // Parameters (atomic for lock-free access)
     std::atomic<float> mDelaySamples;  // Delay in samples
+    std::atomic<float> mDelayTimeMs;
+    std::atomic<float> mSampleRate;
     std::atomic<float> mFeedback;
     std::atomic<float> mMix;
     std::atomic<bool> mEnabled;

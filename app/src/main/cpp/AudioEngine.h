@@ -54,8 +54,9 @@ public:
     void setVoiceLevel(uint32_t partIndex, float level);
     void setVoiceDecay(uint32_t partIndex, float decayMs);
     void setVoiceFilter(uint32_t partIndex, Tribex::FilterType filter);
-
-    // M5: Part control
+    void setVoiceTrim(uint32_t partIndex, uint32_t startOffset, uint32_t endOffset);
+    
+    // Mute/Solo
     void setPartMute(uint32_t partIndex, bool muted);
     void setPartSolo(uint32_t partIndex, bool solo);
 

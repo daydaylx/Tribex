@@ -42,6 +42,7 @@ This document records all binding technical decisions. Agents must not deviate w
 | Compose Compiler | 1.5.10 | M6: Compatibility with Kotlin 1.9.22 |
 | Kotlin Serialization | 1.6.2 | M8: JSON serialization for pattern steps/parameters |
 | Lifecycle Process | 2.7.0 | M8: ProcessLifecycleOwner for autosave on app background |
+| Lifecycle ViewModel Compose | 2.7.0 | Compose integration for viewModel() usage |
 
 ## M7: Offline Export Decisions
 
@@ -131,8 +132,48 @@ This document records all binding technical decisions. Agents must not deviate w
 - **Temp Backup**: If WAL recovery fails, restore from `.tmp` file
 - **Best Effort**: Last known good state may be lost if crash during critical section
 
+## M9: Landscape Orientation
+
+| Decision | Value | Rationale |
+|----------|-------|-----------|
+| Screen Orientation | `sensorLandscape` | Hardware groovebox feel;双手操作 |
+| Landscape Type | Sensor (auto-rotate) | Allows both landscape orientations for flexible device placement |
+| Layout Strategy | Row-based (2-column) | Left: Controls (220dp), Right: Content (remaining) |
+| Pattern Screen | Split layout: Controls left, StepGrid right | StepGrid needs maximum space; controls accessible with one hand |
+| Sound Screen | 2-column parameter layout | Parameters split across left/right to reduce scrolling |
+| Sample Screen | Split view: Browser left, Details right | Preview and assignment visible simultaneously |
+| Touch Targets | >= 44dp (already satisfied) | All controls remain accessible in landscape |
+| StepGrid | Canvas-based (unchanged) | Maintain 60fps performance without full-screen recomposition |
+
+### M9: Rationale for Landscape-Only
+
+TribeX is a groovebox (hardware metaphor), not a DAW. Landscape orientation provides:
+
+1. **Two-Thumb Operation**: Natural for holding device with both hands (like a physical groovebox)
+2. **Step Grid Space**: 16-64 steps need horizontal space; vertical scrolling breaks the "beat grid" metaphor
+3. **Hardware Feel**: Mirrors TR-808/909, MPC, etc. - all designed for wide displays
+4. **Control Density**: More horizontal space for simultaneous access to transport, mute/solo, and pattern editing
+5. **Performance View**: StepGrid + controls visible without scrolling (critical for live performance)
+
+### M9: Screen-Specific Layout Decisions
+
+**Pattern Screen**
+- Left column (220dp): Transport, Shift, BPM, Page, Part Tabs, Mute/Solo
+- Right column (flex): StepGrid (Canvas-based, maximum space)
+- Bottom Navigation remains at bottom (Scaffold padding)
+
+**Sound Screen**
+- Left column: Part Selector, Rec Toggle, AMP/FILTER parameters, PITCH
+- Right column: ADSR, FX SEND, Master FX
+- Parameters grouped logically; no submenus (per SPEC v3.1)
+
+**Sample Screen**
+- Left column (flex): Sample browser list (LazyColumn)
+- Right column (flex): Assignment controls, Waveform preview placeholder, Trim controls placeholder
+- Deferred items (M10): Waveform rendering, Trim/Loop point editing documented in DEFERRED.md
+
 ## Open Decisions (to be resolved)
 
-- [ ] Compose vs View-based UI for 60fps step indicator (needs profiling)
+- [x] Compose vs View-based UI for 60fps step indicator (Canvas-based, implemented in StepGrid component)
 - [ ] FlatBuffers vs DirectByteBuffer for JNI bridge (evaluate complexity vs performance)
 - [ ] Export UI placement: PatternScreen vs SoundScreen vs new ExportScreen (M8)

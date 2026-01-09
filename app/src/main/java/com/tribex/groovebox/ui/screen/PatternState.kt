@@ -1,7 +1,6 @@
 package com.tribex.groovebox.ui.screen
 
 import com.tribex.groovebox.engine.Velocity
-import com.tribex.groovebox.engine.Microtiming
 
 /**
  * Pattern Display State
@@ -15,6 +14,7 @@ data class PatternState(
     val currentPatternId: UInt = 0u,       // Active pattern ID
     val patternLengthSteps: UInt = 16u,     // Pattern length (16/32/48/64)
     val currentPage: UInt = 0u,             // Current page (0-3 for 16/32/48/64)
+    val patternSeed: UInt = 0u,             // Pattern seed for deterministic probability
     val steps: List<List<StepDisplayState>>  // 9 Parts x 16 Steps (visible page)
 ) {
     companion object {
@@ -26,7 +26,8 @@ data class PatternState(
                         partIndex = part.toUInt(),
                         gate = false,
                         velocity = Velocity.NORMAL,
-                        probability = 100u
+                        probability = 100u,
+                        microtiming = 0
                     )
                 }
             }
@@ -45,7 +46,8 @@ data class StepDisplayState(
     val partIndex: UInt,       // Part index (0-8)
     val gate: Boolean,          // Gate state (ON/OFF)
     val velocity: UByte,       // Velocity (2-bit)
-    val probability: UByte      // Probability (0-100%)
+    val probability: UByte,     // Probability (0-100%)
+    val microtiming: Byte = 0   // Microtiming (-50 to +50 ticks)
 )
 
 /**

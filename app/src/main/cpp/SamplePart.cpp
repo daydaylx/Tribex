@@ -8,6 +8,8 @@ SamplePart::SamplePart(uint32_t partIndex)
     : mPartIndex(partIndex)
     , mSampleLoaded(false)
     , mSampleId(0)
+    , mStartOffset(0)
+    , mEndOffset(0)
     , mMuted(false)
     , mSoloed(false)
     , mFrameCounter(0)
@@ -20,12 +22,13 @@ SamplePart::SamplePart(uint32_t partIndex)
 }
 
 SamplePart::~SamplePart() {
-    unloadSample();
+    unloadSample(false);
+    releaseRetiredSamples();
 }
 
-void SamplePart::loadSample(const SampleData& sample) {
+void SamplePart::loadSample(const SampleData& sample, bool deferFree) {
     // Unload previous sample
-    unloadSample();
+    unloadSample(deferFree);
     
     // Copy sample metadata
     mSample.id = sample.id;
@@ -33,16 +36,19 @@ void SamplePart::loadSample(const SampleData& sample) {
     mSample.startOffset = sample.startOffset;
     mSample.endOffset = sample.endOffset;
     
-    // Calculate effective length (with trim)
-    uint32_t effectiveLength = sample.length;
-    if (sample.endOffset > 0) {
-        effectiveLength = std::min(effectiveLength, sample.endOffset);
-    }
-    if (sample.startOffset > 0) {
-        effectiveLength -= sample.startOffset;
+    // Calculate effective length (with trim), using safe bounds
+    uint32_t safeStart = std::min(sample.startOffset, sample.length);
+    uint32_t safeEnd = sample.endOffset == 0 ? sample.length
+                                             : std::min(sample.endOffset, sample.length);
+    if (safeEnd <= safeStart) {
+        safeStart = 0;
+        safeEnd = sample.length;
     }
     
+    uint32_t effectiveLength = safeEnd - safeStart;
     mSample.length = effectiveLength;
+    mSample.startOffset = safeStart;
+    mSample.endOffset = (safeEnd == sample.length) ? 0 : safeEnd;
     
     // Allocate sample data (float buffer)
     // Note: sample.data is jbyte* from JNI (containing float32 data)
@@ -52,13 +58,15 @@ void SamplePart::loadSample(const SampleData& sample) {
         if (mSample.data != nullptr) {
             // Copy sample data (with trim)
             // sample.data is jbyte* containing float32 data
-            uint32_t srcOffset = sample.startOffset * sizeof(float);
+            uint32_t srcOffset = safeStart * sizeof(float);
             const uint8_t* srcBytes = reinterpret_cast<const uint8_t*>(sample.data);
             std::memcpy(mSample.data, srcBytes + srcOffset, 
                        effectiveLength * sizeof(float));
             mSample.loaded = true;
             mSampleLoaded.store(true, std::memory_order_release);
             mSampleId.store(sample.id, std::memory_order_release);
+            mStartOffset.store(safeStart, std::memory_order_release);
+            mEndOffset.store(safeEnd, std::memory_order_release);
         } else {
             mSample.loaded = false;
             mSampleLoaded.store(false, std::memory_order_release);
@@ -70,9 +78,14 @@ void SamplePart::loadSample(const SampleData& sample) {
     }
 }
 
-void SamplePart::unloadSample() {
+void SamplePart::unloadSample(bool deferFree) {
     if (mSample.data != nullptr) {
-        delete[] mSample.data;
+        if (deferFree) {
+            std::lock_guard<std::mutex> lock(mRetiredSamplesMutex);
+            mRetiredSamples.push_back(mSample.data);
+        } else {
+            delete[] mSample.data;
+        }
         mSample.data = nullptr;
     }
     
@@ -85,6 +98,29 @@ void SamplePart::unloadSample() {
     for (uint32_t i = 0; i < MAX_VOICES_PER_PART; i++) {
         mVoices[i].stop();
     }
+}
+
+void SamplePart::releaseRetiredSamples() {
+    std::lock_guard<std::mutex> lock(mRetiredSamplesMutex);
+    for (float* data : mRetiredSamples) {
+        delete[] data;
+    }
+    mRetiredSamples.clear();
+}
+
+void SamplePart::setTrim(uint32_t startOffset, uint32_t endOffset) {
+    if (mSample.data == nullptr) return;
+    
+    // Validate bounds
+    if (startOffset > mSample.length) startOffset = mSample.length;
+    if (endOffset == 0 || endOffset > mSample.length) endOffset = mSample.length;
+    if (endOffset <= startOffset) {
+        startOffset = 0;
+        endOffset = mSample.length;
+    }
+    
+    mStartOffset.store(startOffset, std::memory_order_relaxed);
+    mEndOffset.store(endOffset, std::memory_order_relaxed);
 }
 
 void SamplePart::setPitch(float pitch) {
@@ -131,9 +167,14 @@ bool SamplePart::trigger(float velocity) {
     // Find idle voice
     SampleVoice* idleVoice = findIdleVoice();
     
+    // Get current trim range
+    uint32_t start = mStartOffset.load(std::memory_order_relaxed);
+    uint32_t end = mEndOffset.load(std::memory_order_relaxed);
+    uint32_t length = (end > start) ? (end - start) : 0;
+    
     if (idleVoice != nullptr) {
         // Found idle voice - use it
-        idleVoice->start(mSample.data, mSample.length, mSample.sampleRate, 
+        idleVoice->start(mSample.data + start, length, mSample.sampleRate, 
                         velocity);
         
         // Update voice start frame for stealing
@@ -150,7 +191,7 @@ bool SamplePart::trigger(float velocity) {
         // Stop oldest voice and restart
         oldestVoice->stop();
         
-        oldestVoice->start(mSample.data, mSample.length, mSample.sampleRate, 
+        oldestVoice->start(mSample.data + start, length, mSample.sampleRate, 
                         velocity);
         
         // Update voice start frame for stealing
@@ -185,7 +226,8 @@ void SamplePart::render(float* leftBuffer, float* rightBuffer, int32_t numFrames
     }
     
     // Safety check: validate mMaxVoices
-    uint32_t safeMaxVoices = (mMaxVoices > MAX_VOICES_PER_PART) ? MAX_VOICES_PER_PART : mMaxVoices;
+    uint32_t maxVoices = mMaxVoices.load(std::memory_order_relaxed);
+    uint32_t safeMaxVoices = (maxVoices > MAX_VOICES_PER_PART) ? MAX_VOICES_PER_PART : maxVoices;
     if (safeMaxVoices == 0) {
         safeMaxVoices = 1;  // At least 1 voice
     }
@@ -208,8 +250,9 @@ void SamplePart::render(float* leftBuffer, float* rightBuffer, int32_t numFrames
 SampleVoice* SamplePart::findOldestVoice() {
     SampleVoice* oldest = nullptr;
     uint64_t oldestStart = UINT64_MAX;
-    
-    for (uint32_t i = 0; i < mMaxVoices; i++) {
+
+    uint32_t maxVoices = mMaxVoices.load(std::memory_order_relaxed);
+    for (uint32_t i = 0; i < maxVoices; i++) {
         if (mVoices[i].isPlaying()) {
             if (mVoiceStartFrames[i] < oldestStart) {
                 oldestStart = mVoiceStartFrames[i];
@@ -222,7 +265,8 @@ SampleVoice* SamplePart::findOldestVoice() {
 }
 
 SampleVoice* SamplePart::findIdleVoice() {
-    for (uint32_t i = 0; i < mMaxVoices; i++) {
+    uint32_t maxVoices = mMaxVoices.load(std::memory_order_relaxed);
+    for (uint32_t i = 0; i < maxVoices; i++) {
         if (!mVoices[i].isPlaying()) {
             return &mVoices[i];
         }
@@ -235,7 +279,7 @@ void SamplePart::setMaxVoices(uint32_t maxVoices) {
     if (maxVoices < 1) maxVoices = 1;
     if (maxVoices > MAX_VOICES_PER_PART) maxVoices = MAX_VOICES_PER_PART;
     
-    mMaxVoices = maxVoices;
+    mMaxVoices.store(maxVoices, std::memory_order_relaxed);
 }
 
 uint32_t SamplePart::getActiveVoiceCount() const {

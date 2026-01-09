@@ -29,6 +29,10 @@ void FXManager::setDelayMix(float mix) {
     mDelay.setMix(mix);
 }
 
+void FXManager::setSampleRate(float sampleRate) {
+    mDelay.setSampleRate(sampleRate);
+}
+
 // Reverb parameter control
 void FXManager::setReverbSize(float size) {
     mReverb.setSize(size);

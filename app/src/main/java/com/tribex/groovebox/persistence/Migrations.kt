@@ -29,12 +29,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Note: This is a placeholder. Add actual migration logic when schema changes.
  */
 val MIGRATION_1_2 = object : Migration(1, 2) {
-    override fun migrate(database: SupportSQLiteDatabase) {
+    override fun migrate(db: SupportSQLiteDatabase) {
         // Example: Add a new column to Project table
-        // database.execSQL("ALTER TABLE projects ADD COLUMN tempo INTEGER NOT NULL DEFAULT 120")
+        // db.execSQL("ALTER TABLE projects ADD COLUMN tempo INTEGER NOT NULL DEFAULT 120")
         
         // Example: Create new table
-        // database.execSQL("""
+        // db.execSQL("""
         //     CREATE TABLE IF NOT EXISTS new_table (
         //         id TEXT PRIMARY KEY NOT NULL,
         //         projectId TEXT NOT NULL,

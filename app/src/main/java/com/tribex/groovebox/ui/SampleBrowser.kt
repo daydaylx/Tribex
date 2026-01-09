@@ -14,14 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.tribex.groovebox.audio.WavParser
 import com.tribex.groovebox.engine.SampleImportResult
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Sample Browser Component - M4
@@ -45,6 +43,7 @@ fun SampleBrowser(
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var nextSampleId by remember { mutableIntStateOf(1) }
+    val scope = rememberCoroutineScope()
     
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -91,23 +90,21 @@ fun SampleBrowser(
                 modifier = Modifier.padding(vertical = 8.dp)
             )
             
-            Divider()
+            HorizontalDivider()
             
             // Load button
             Button(
                 onClick = {
                     isLoading = true
-                    GlobalScope.launch {
+                    scope.launch {
                         val result = loadSample(context, uri, nextSampleId)
-                        withContext(Dispatchers.Main) {
-                            isLoading = false
-                            if (result.success) {
-                                onSampleLoaded(nextSampleId, result)
-                                nextSampleId++
-                                selectedUri = null
-                            } else {
-                                error = result.error
-                            }
+                        isLoading = false
+                        if (result.success) {
+                            onSampleLoaded(nextSampleId, result)
+                            nextSampleId++
+                            selectedUri = null
+                        } else {
+                            error = result.error
                         }
                     }
                 },
@@ -202,21 +199,22 @@ private suspend fun loadSample(
         val fileData = outputStream.toByteArray()
         
         // Parse WAV header
-        val wavResult = parseWAV(fileData)
+        val wavResult = WavParser.parseWav(fileData)
         
         if (wavResult == null) {
             return@withContext SampleImportResult(error = "Invalid WAV file format")
         }
         
         // Convert audio data to float32
-        val floatData = convertToFloat32(fileData, wavResult)
+        val floatData = WavParser.convertToMonoFloat32(fileData, wavResult)
         
         if (floatData == null) {
             return@withContext SampleImportResult(error = "Failed to convert audio data")
         }
         
-        // Calculate duration in ms
-        val durationMs = (floatData.size * 1000L) / wavResult.sampleRate
+        // Calculate duration in ms (float32 mono samples)
+        val sampleCount = floatData.size / 4
+        val durationMs = (sampleCount * 1000L) / wavResult.sampleRate
         
         // Create metadata
         val metadata = com.tribex.groovebox.engine.SampleMetadata(
@@ -225,7 +223,7 @@ private suspend fun loadSample(
             lengthMs = durationMs,
             sampleRate = wavResult.sampleRate,
             startOffset = 0,
-            endOffset = floatData.size
+            endOffset = sampleCount
         )
         
         SampleImportResult(
@@ -240,123 +238,4 @@ private suspend fun loadSample(
         Log.e("SampleBrowser", "Error loading sample", e)
         SampleImportResult(error = "Failed to load sample: ${e.message}")
     }
-}
-
-/**
- * WAV Parsing Result
- */
-private data class WAVParseResult(
-    val sampleRate: Int,
-    val bitsPerSample: Int,
-    val numChannels: Int,
-    val dataOffset: Int,
-    val dataLength: Int
-)
-
-/**
- * Parse WAV file header
- */
-private fun parseWAV(data: ByteArray): WAVParseResult? {
-    if (data.size < 44) return null
-    
-    val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
-    
-    // Check RIFF header
-    val riff = String(data, 0, 4)
-    if (riff != "RIFF") return null
-    
-    // Check WAVE format
-    val wave = String(data, 8, 4)
-    if (wave != "WAVE") return null
-    
-    // Check fmt chunk
-    val fmt = String(data, 12, 4)
-    if (fmt != "fmt ") return null
-    
-    // Get audio format (should be 1 for PCM)
-    val audioFormat = buffer.getShort(20).toInt()
-    if (audioFormat != 1) return null
-    
-    // Get num channels
-    val numChannels = buffer.getShort(22).toInt()
-    
-    // Get sample rate
-    val sampleRate = buffer.getInt(24)
-    
-    // Get bits per sample
-    val bitsPerSample = buffer.getShort(34).toInt()
-    
-    // Find data chunk
-    var offset = 36
-    var dataOffset = 0
-    var dataLength = 0
-    
-    while (offset + 8 < data.size) {
-        val chunkId = String(data, offset, 4)
-        val chunkSize = buffer.getInt(offset + 4)
-        
-        if (chunkId == "data") {
-            dataOffset = offset + 8
-            dataLength = chunkSize
-            break
-        }
-        
-        offset += 8 + chunkSize
-    }
-    
-    if (dataOffset == 0) return null
-    
-    return WAVParseResult(
-        sampleRate = sampleRate,
-        bitsPerSample = bitsPerSample,
-        numChannels = numChannels,
-        dataOffset = dataOffset,
-        dataLength = dataLength
-    )
-}
-
-/**
- * Convert audio data to float32
- */
-private fun convertToFloat32(data: ByteArray, wav: WAVParseResult): ByteArray? {
-    val buffer = ByteBuffer.wrap(data, wav.dataOffset, wav.dataLength)
-        .order(ByteOrder.LITTLE_ENDIAN)
-    
-    val numSamples = wav.dataLength / (wav.bitsPerSample / 8)
-    val floatBuffer = ByteBuffer.allocate(numSamples * 4).order(ByteOrder.LITTLE_ENDIAN)
-    
-    when (wav.bitsPerSample) {
-        16 -> {
-            val shortBuffer = buffer.asShortBuffer()
-            for (i in 0 until numSamples) {
-                val sample = shortBuffer.get(i).toFloat() / 32768.0f
-                floatBuffer.putFloat(i * 4, sample)
-            }
-        }
-        24 -> {
-            for (i in 0 until numSamples) {
-                val byte0 = buffer.get(i * 3).toInt() and 0xFF
-                val byte1 = buffer.get(i * 3 + 1).toInt() and 0xFF
-                val byte2 = buffer.get(i * 3 + 2).toInt() and 0xFF
-                var sample = byte0 or (byte1 shl 8) or (byte2 shl 16)
-                
-                // Sign-extend 24-bit to 32-bit
-                if (sample and 0x800000 != 0) {
-                    sample = sample or 0xFF000000.toInt()
-                }
-                
-                floatBuffer.putFloat(i * 4, sample.toFloat() / 8388608.0f)
-            }
-        }
-        32 -> {
-            val intBuffer = buffer.asIntBuffer()
-            for (i in 0 until numSamples) {
-                val sample = intBuffer.get(i).toFloat() / 2147483648.0f
-                floatBuffer.putFloat(i * 4, sample)
-            }
-        }
-        else -> return null
-    }
-    
-    return floatBuffer.array()
 }

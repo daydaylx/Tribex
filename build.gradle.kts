@@ -2,4 +2,5 @@
 plugins {
     id("com.android.application") version "8.0.2" apply false
     id("org.jetbrains.kotlin.android") version "1.9.22" apply false  // M4.5: Updated for Compose 1.5.4 compatibility
+    id("io.gitlab.arturbosch.detekt") version "1.23.5"
 }

@@ -1,0 +1,66 @@
+build:
+  maxIssues: 0
+  excludeCorrectable: false
+  weights:
+    # complexity: 2
+    # LongParameterList: 1
+    # style: 1
+    # comments: 1
+
+complexity:
+  active: true
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 40
+    thresholdInClasses: 30
+    thresholdInInterfaces: 20
+    thresholdInObjects: 20
+    thresholdInEnums: 10
+    ignoreDeprecated: false
+  LongParameterList:
+    active: true
+    functionThreshold: 6
+    constructorThreshold: 7
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+  LargeClass:
+    active: true
+    threshold: 600
+
+style:
+  active: true
+  MagicNumber:
+    active: true
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+      - '16'
+      - '32'
+      - '48'
+      - '64'
+    ignoreHashCodeFunction: true
+    ignorePropertyDeclaration: true
+    ignoreLocalVariableDeclaration: false
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreNamedArgument: true
+    ignoreEnums: true
+  UnusedPrivateMember:
+    active: true
+    allowedNames: '(_|ignored|expected|serialVersionUID)'
+
+naming:
+  active: true
+  FunctionNaming:
+    active: true
+    functionPattern: '([a-z][a-zA-Z0-9]*)|([A-Z][a-zA-Z0-9]*)' # Allow PascalCase for Compose @Composable
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[A-Z][_A-Z0-9]*|[a-z][a-zA-Z0-9]*' # Allow upper case for constants
+
+potential-bugs:
+  active: true

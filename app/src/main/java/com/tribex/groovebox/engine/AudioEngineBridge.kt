@@ -21,11 +21,6 @@ object AudioEngineBridge {
     }
     
     /**
-     * Set debug log file path (called from MainActivity)
-     */
-    external fun setDebugLogPath(path: String)
-    
-    /**
      * Start the audio engine
      */
     external fun startAudioEngine(): Boolean
@@ -212,6 +207,17 @@ object AudioEngineBridge {
      * Non-blocking - pushes event to queue
      */
     external fun setVoiceFilter(partIndex: Int, filterType: Int)
+    
+    /**
+     * Set voice trim range
+     * 
+     * @param partIndex Part index (0-7 for drums)
+     * @param startOffset Start offset in samples
+     * @param endOffset End offset in samples (0 = end of sample)
+     * 
+     * Non-blocking - updates atomic parameters
+     */
+    external fun setVoiceTrim(partIndex: Int, startOffset: Int, endOffset: Int)
     
     /**
      * Mute a part

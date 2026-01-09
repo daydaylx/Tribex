@@ -4,22 +4,6 @@
 #include <cstring>
 #include <cstdio>
 #include <ctime>
-#include <string>
-
-// Debug log path - will be set from JNI
-static std::string gDebugLogPath = "/data/data/com.tribex.groovebox/files/debug.log";
-
-// Helper function to get log file path (can be set from JNI)
-const char* getDebugLogPath() {
-    return gDebugLogPath.c_str();
-}
-
-// Setter function (called from JNI)
-extern "C" void setDebugLogPathNative(const char* path) {
-    if (path) {
-        gDebugLogPath = std::string(path);
-    }
-}
 
 #define TAG "AudioEngine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -72,6 +56,7 @@ bool AudioEngine::start() {
     if (mStream) {
         float sampleRate = mStream->getSampleRate();
         mSynthPart.initialize(sampleRate);
+        mFXManager.setSampleRate(sampleRate);
     }
 
     result = mStream->requestStart();
@@ -104,6 +89,9 @@ bool AudioEngine::stop() {
     mIsPlaying.store(false);
     mPhase.store(0.0); // Reset phase on stop
     mSequencer.stop(); // Stop sequencer
+    for (uint32_t i = 0; i < 8; i++) {
+        mSampleParts[i].releaseRetiredSamples();
+    }
     LOGI("Audio stopped");
     return true;
 }
@@ -177,13 +165,6 @@ bool AudioEngine::isSequencerPlaying() const {
 void AudioEngine::setPattern(const Tribex::Pattern& pattern) {
     // Direct call - patterns are too large for event queue
     // This is called from control thread, but sequencer.loadPattern() is thread-safe
-    // #region agent log
-    FILE* logFile = fopen(getDebugLogPath(), "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"set_pattern_audio\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:161\",\"message\":\"setPattern called\",\"data\":{\"patternId\":%u,\"lengthSteps\":%u,\"patternSeed\":%u},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"M\"}\n", (long)(time(nullptr) * 1000), pattern.id, pattern.lengthSteps, pattern.patternSeed);
-        fclose(logFile);
-    }
-    // #endregion
     mSequencer.loadPattern(pattern);
 }
 
@@ -202,9 +183,10 @@ void AudioEngine::loadSample(uint32_t partIndex, const Tribex::SampleData& sampl
         LOGE("Invalid part index for sample loading: %d", partIndex);
         return;
     }
-    
+
     // Load sample into part (called from IO thread, allocations allowed)
-    mSampleParts[partIndex].loadSample(sample);
+    bool deferFree = mIsPlaying.load(std::memory_order_relaxed);
+    mSampleParts[partIndex].loadSample(sample, deferFree);
     
     LOGI("Loaded sample %d into part %d", sample.id, partIndex);
 }
@@ -214,8 +196,9 @@ void AudioEngine::unloadSample(uint32_t partIndex) {
         LOGE("Invalid part index for sample unloading: %d", partIndex);
         return;
     }
-    
-    mSampleParts[partIndex].unloadSample();
+
+    bool deferFree = mIsPlaying.load(std::memory_order_relaxed);
+    mSampleParts[partIndex].unloadSample(deferFree);
     
     LOGI("Unloaded sample from part %d", partIndex);
 }
@@ -294,6 +277,15 @@ void AudioEngine::setVoiceFilter(uint32_t partIndex, Tribex::FilterType filter) 
     if (!mEventQueue.push(event)) {
         LOGE("Event queue full - filter event dropped");
     }
+}
+
+void AudioEngine::setVoiceTrim(uint32_t partIndex, uint32_t startOffset, uint32_t endOffset) {
+    if (partIndex >= 8) {
+        LOGE("Invalid part index: %d", partIndex);
+        return;
+    }
+    
+    mSampleParts[partIndex].setTrim(startOffset, endOffset);
 }
 
 void AudioEngine::setPartMute(uint32_t partIndex, bool muted) {
@@ -587,12 +579,9 @@ void AudioEngine::processEvents() {
                 break;
                 
             case EventType::LOAD_SAMPLE:
-                // Sample loading is done via loadSample() method (IO thread)
-                // This event is for future use
                 break;
                 
             default:
-                // Reserved events - ignore
                 break;
         }
     }
@@ -602,30 +591,8 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     oboe::AudioStream *stream,
     void *audioData,
     int32_t numFrames) {
-    // #region agent log
-    static int32_t callbackCount = 0;
-    callbackCount++;
-    if (callbackCount % 100 == 0) {  // Log every 100th callback to avoid flooding
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"audio_callback_entry_%d\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:605\",\"message\":\"onAudioReady entry\",\"data\":{\"numFrames\":%d,\"callbackCount\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n", callbackCount, (long)(time(nullptr) * 1000), numFrames, callbackCount);
-            fclose(logFile);
-        } else {
-            // Fallback to logcat if file write fails
-            LOGI("DEBUG: audio_callback_entry_%d numFrames=%d", callbackCount, numFrames);
-        }
-    }
-    // #endregion
-
     // Safety check: validate numFrames
     if (numFrames <= 0 || numFrames > MAX_FRAMES) {
-        // #region agent log
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"invalid_numframes_%d\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:582\",\"message\":\"Invalid numFrames detected\",\"data\":{\"numFrames\":%d,\"MAX_FRAMES\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n", callbackCount, (long)(time(nullptr) * 1000), numFrames, MAX_FRAMES);
-            fclose(logFile);
-        }
-        // #endregion
         // Invalid frame count - return silence
         if (stream->getFormat() == oboe::AudioFormat::Float) {
             auto *outputBuffer = static_cast<float *>(audioData);
@@ -677,25 +644,8 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     // Update sequencer (get trigger events)
     mSequencer.update(currentSample, sampleRate, triggers, &numTriggers);
     
-    // #region agent log
-    if (callbackCount % 100 == 0 || numTriggers > 0) {  // Log on triggers or every 100th callback
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"sequencer_update_%d\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:632\",\"message\":\"Sequencer update result\",\"data\":{\"currentSample\":%ld,\"sampleRate\":%.2f,\"numTriggers\":%u,\"safeNumFrames\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\"}\n", callbackCount, (long)(time(nullptr) * 1000), currentSample, sampleRate, numTriggers, safeNumFrames);
-            fclose(logFile);
-        }
-    }
-    // #endregion
-    
     // Safety check: clamp numTriggers to prevent array overflow
     if (numTriggers > MAX_TRIGGERS_PER_CALLBACK) {
-        // #region agent log
-        FILE* logFile = fopen(getDebugLogPath(), "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"trigger_overflow_%d\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:635\",\"message\":\"Trigger overflow detected\",\"data\":{\"numTriggers\":%u,\"MAX_TRIGGERS\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\"}\n", callbackCount, (long)(time(nullptr) * 1000), numTriggers, MAX_TRIGGERS_PER_CALLBACK);
-            fclose(logFile);
-        }
-        // #endregion
         numTriggers = MAX_TRIGGERS_PER_CALLBACK;
     }
     
@@ -704,13 +654,6 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
         if (triggers[i].triggered) {
             // Trigger voice for this part
             uint32_t partIndex = triggers[i].partIndex;
-            // #region agent log
-            FILE* logFile = fopen(getDebugLogPath(), "a");
-            if (logFile) {
-                fprintf(logFile, "{\"id\":\"trigger_%d_%d\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:641\",\"message\":\"Processing trigger\",\"data\":{\"triggerIndex\":%u,\"partIndex\":%u,\"stepIndex\":%u,\"velocity\":%u,\"NUM_PARTS\":%u},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\"}\n", callbackCount, i, (long)(time(nullptr) * 1000), i, partIndex, triggers[i].stepIndex, triggers[i].velocity, Tribex::NUM_PARTS);
-                fclose(logFile);
-            }
-            // #endregion
             if (partIndex < Tribex::NUM_PARTS) {
                 float velocity = Tribex::velocityToFloat(triggers[i].velocity);
                 if (partIndex < 8) {
@@ -719,13 +662,6 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
                     mSynthPart.trigger(velocity);
                 }
             } else {
-                // #region agent log
-                FILE* logFile = fopen(getDebugLogPath(), "a");
-                if (logFile) {
-                    fprintf(logFile, "{\"id\":\"invalid_part_index_%d\",\"timestamp\":%ld,\"location\":\"AudioEngine.cpp:644\",\"message\":\"Invalid part index in trigger\",\"data\":{\"partIndex\":%u,\"NUM_PARTS\":%u},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"F\"}\n", callbackCount, (long)(time(nullptr) * 1000), partIndex, Tribex::NUM_PARTS);
-                    fclose(logFile);
-                }
-                // #endregion
             }
         }
     }
@@ -803,8 +739,16 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
         
         // M6: Copy processed output to interleaved outputBuffer
         for (int32_t i = 0; i < safeNumFrames; i++) {
-            outputBuffer[i * numChannels] = mFXLeftBuffer[i];
-            outputBuffer[i * numChannels + 1] = mFXRightBuffer[i];
+            if (numChannels == 1) {
+                outputBuffer[i] = mFXLeftBuffer[i];
+            } else {
+                int32_t base = i * numChannels;
+                outputBuffer[base] = mFXLeftBuffer[i];
+                outputBuffer[base + 1] = mFXRightBuffer[i];
+                for (int32_t ch = 2; ch < numChannels; ch++) {
+                    outputBuffer[base + ch] = 0.0f;
+                }
+            }
         }
         
         // M5: Keep test tone for debugging (optional, comment out for production)
@@ -835,7 +779,6 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
 }
 
 void AudioEngine::onErrorAfterClose(oboe::AudioStream *stream, oboe::Result result) {
-    LOGE("Stream error: %s", oboe::convertToText(result));
     mIsPlaying.store(false);
     mSequencer.stop();
 }

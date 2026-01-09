@@ -1,7 +1,8 @@
-#include "../main/cpp/PatternData.h"
-#include "../main/cpp/Probability.h"
-#include "../main/cpp/Sequencer.h"
+#include "PatternData.h"
+#include "Probability.h"
+#include "Sequencer.h"
 #include <cassert>
+#include <cstdio>
 #include <cstdint>
 
 using namespace Tribex;
@@ -317,7 +318,6 @@ bool testMicrotimingConstants() {
 // Sequencer should update step position
 bool testSequencerUpdateSimple() {
     Sequencer sequencer;
-    sequencer.start();
     
     // Load simple pattern
     Pattern pattern;
@@ -329,6 +329,7 @@ bool testSequencerUpdateSimple() {
     pattern.steps[0][0].probability = 100;
     
     sequencer.loadPattern(pattern);
+    sequencer.start();
     
     // Get triggers (simulated)
     StepTrigger triggers[NUM_PARTS];
@@ -356,7 +357,6 @@ bool testSequencerUpdateSimple() {
 // Multiple sequencer update calls should be idempotent
 bool testSequencerIdempotency() {
     Sequencer sequencer;
-    sequencer.start();
     
     Pattern pattern;
     pattern.lengthSteps = 16;
@@ -365,6 +365,7 @@ bool testSequencerIdempotency() {
     pattern.steps[0][0].probability = 100;
     
     sequencer.loadPattern(pattern);
+    sequencer.start();
     
     const double sampleRate = 48000.0;
     StepTrigger triggers1[NUM_PARTS];
@@ -381,6 +382,57 @@ bool testSequencerIdempotency() {
     // Second call should produce 0 triggers (step didn't change)
     if (numTriggers2 != 0) {
         printf("  FAILED: Second update should produce 0 triggers, got %u\n", numTriggers2);
+        return false;
+    }
+    
+    return true;
+}
+
+// TEST: Pattern Change During Playback
+// Switching pattern should be seamless
+bool testSequencerPatternChangeDuringPlayback() {
+    Sequencer sequencer;
+    
+    // Pattern 1: 16 steps
+    Pattern p1;
+    p1.id = 1;
+    p1.lengthSteps = 16;
+    
+    // Pattern 2: 32 steps
+    Pattern p2;
+    p2.id = 2;
+    p2.lengthSteps = 32;
+    
+    sequencer.loadPattern(p1);
+    sequencer.start();
+    
+    // Simulate some playback (step 5)
+    // 44100 samples/step @ 120bpm, 48kHz
+    const double sampleRate = 48000.0;
+    const int64_t step5Sample = static_cast<int64_t>(5 * (60.0 * sampleRate / (120.0 * 4.0)));
+    
+    StepTrigger triggers[NUM_PARTS];
+    uint32_t numTriggers = 0;
+    sequencer.update(step5Sample, sampleRate, triggers, &numTriggers);
+    
+    if (sequencer.getCurrentStep() != 5) {
+        printf("  FAILED: Should be at step 5, got %u\n", sequencer.getCurrentStep());
+        return false;
+    }
+    
+    // Load new pattern while playing
+    sequencer.loadPattern(p2);
+    
+    // Position should reset to 0 immediately (per current design)
+    // Note: Future versions might want to sync to bar boundary
+    if (sequencer.getCurrentStep() != 0) {
+        printf("  FAILED: Position should reset to 0 after pattern change, got %u\n", 
+               sequencer.getCurrentStep());
+        return false;
+    }
+    
+    if (sequencer.getActivePatternId() != 2) {
+        printf("  FAILED: Active pattern should be 2, got %u\n", sequencer.getActivePatternId());
         return false;
     }
     
@@ -410,6 +462,7 @@ int main() {
     runTest("Sequencer Lifecycle", testSequencerLifecycle);
     runTest("Sequencer BPM", testSequencerBPM);
     runTest("Sequencer Pattern Load", testSequencerPatternLoad);
+    runTest("Sequencer Pattern Change During Playback", testSequencerPatternChangeDuringPlayback);
     runTest("Sequencer Update Simple", testSequencerUpdateSimple);
     runTest("Sequencer Idempotency", testSequencerIdempotency);
     

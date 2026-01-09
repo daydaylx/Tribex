@@ -7,6 +7,8 @@ namespace Tribex {
 DelayEffect::DelayEffect()
     : mWriteHead(0)
     , mDelaySamples(0.0f)
+    , mDelayTimeMs(0.0f)
+    , mSampleRate(48000.0f)
     , mFeedback(0.0f)
     , mMix(0.0f)
     , mEnabled(true)
@@ -22,9 +24,13 @@ void DelayEffect::setTimeMs(float timeMs) {
     // Clamp to valid range
     timeMs = std::max(0.0f, std::min(1000.0f, timeMs));
     
-    // Convert to samples (assuming 48kHz sample rate)
-    // TODO: Use actual sample rate from AudioEngine
-    const float sampleRate = 48000.0f;
+    mDelayTimeMs.store(timeMs);
+    
+    // Convert to samples using current sample rate
+    float sampleRate = mSampleRate.load(std::memory_order_relaxed);
+    if (sampleRate <= 0.0f) {
+        sampleRate = 48000.0f;
+    }
     float samples = timeMs * sampleRate / 1000.0f;
     
     // Clamp to buffer size
@@ -42,6 +48,18 @@ void DelayEffect::setMix(float mix) {
     // Clamp to valid range
     mix = std::max(0.0f, std::min(1.0f, mix));
     mMix.store(mix);
+}
+
+void DelayEffect::setSampleRate(float sampleRate) {
+    if (sampleRate <= 0.0f) {
+        sampleRate = 48000.0f;
+    }
+    mSampleRate.store(sampleRate, std::memory_order_relaxed);
+    
+    float timeMs = mDelayTimeMs.load(std::memory_order_relaxed);
+    float samples = timeMs * sampleRate / 1000.0f;
+    samples = std::min(static_cast<float>(MAX_DELAY_SAMPLES), samples);
+    mDelaySamples.store(samples);
 }
 
 void DelayEffect::clear() {
@@ -83,7 +101,10 @@ void DelayEffect::process(float* leftIn, float* rightIn,
 
     for (int32_t i = 0; i < numFrames; ++i) {
         // Calculate read position (circular buffer)
-        int32_t readHead = (mWriteHead - delayInt + MAX_DELAY_SAMPLES) & WRITE_HEAD_MASK;
+        int32_t readHead = mWriteHead - delayInt;
+        if (readHead < 0) {
+            readHead += MAX_DELAY_SAMPLES;
+        }
 
         // Get delayed signal
         float delayedLeft = mDelayBufferLeft[readHead];
@@ -107,7 +128,10 @@ void DelayEffect::process(float* leftIn, float* rightIn,
         rightOut[i] = dry * (1.0f - mCurrentMix) + wet * mCurrentMix;
 
         // Advance write head
-        mWriteHead = (mWriteHead + 1) & WRITE_HEAD_MASK;
+        mWriteHead++;
+        if (mWriteHead >= MAX_DELAY_SAMPLES) {
+            mWriteHead = 0;
+        }
     }
 }
 

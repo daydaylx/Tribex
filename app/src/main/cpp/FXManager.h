@@ -29,6 +29,7 @@ public:
     void setDelayTimeMs(float timeMs);
     void setDelayFeedback(float feedback);
     void setDelayMix(float mix);
+    void setSampleRate(float sampleRate);
     
     // Reverb
     void setReverbSize(float size);
