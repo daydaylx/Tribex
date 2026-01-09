@@ -64,3 +64,25 @@ naming:
 
 potential-bugs:
   active: true
+  UnsafeCast:
+    active: true
+  LateinitUsage:
+    active: false # Allow lateinit for Android components
+  IgnoredReturnValue:
+    active: true
+
+coroutines:
+  active: true
+  GlobalCoroutineUsage:
+    active: true
+  SuspendFunWithFlowReturnType:
+    active: true
+
+performance:
+  active: true
+  ForEachOnRange:
+    active: true
+  SpreadOperator:
+    active: false # Common in Android
+  UnnecessaryTemporaryInstantiation:
+    active: true

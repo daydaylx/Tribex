@@ -28,6 +28,19 @@ target_include_directories(tribex_samplepart_tests PRIVATE
     ${TRIBEX_SRC_DIR}
 )
 
+# Lock-free ring buffer tests (retirement queue)
+# TODO: Enable when Google Test is available in build environment
+# add_executable(tribex_retirement_queue_tests
+#     RetirementQueueTest.cpp
+#     ${TRIBEX_SRC_DIR}/SamplePart.cpp
+#     ${TRIBEX_SRC_DIR}/SampleVoice.cpp
+# )
+# 
+# target_include_directories(tribex_retirement_queue_tests PRIVATE
+#     ${TRIBEX_SRC_DIR}
+# )
+
 enable_testing()
 add_test(NAME tribex_sequencer_tests COMMAND tribex_sequencer_tests)
 add_test(NAME tribex_samplepart_tests COMMAND tribex_samplepart_tests)
+# add_test(NAME tribex_retirement_queue_tests COMMAND tribex_retirement_queue_tests)

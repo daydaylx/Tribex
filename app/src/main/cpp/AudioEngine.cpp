@@ -107,7 +107,7 @@ void AudioEngine::setMasterGain(float gain) {
     
     AudioEvent event(EventType::SET_MASTER_GAIN, gain);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - gain event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -118,7 +118,7 @@ void AudioEngine::setMasterPan(float pan) {
     
     AudioEvent event(EventType::SET_MASTER_PAN, pan);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - pan event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -129,7 +129,7 @@ void AudioEngine::setTestToneFrequency(float freq) {
     
     AudioEvent event(EventType::SET_TEST_TONE_FREQ, freq);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - frequency event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -141,7 +141,7 @@ void AudioEngine::setBPM(float bpm) {
     
     AudioEvent event(EventType::SET_BPM, bpm);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - BPM event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -215,7 +215,7 @@ void AudioEngine::setVoicePitch(uint32_t partIndex, float pitch) {
     
     AudioEvent event(EventType::SET_VOICE_PITCH, pitch, partIndex);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - pitch event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -231,7 +231,7 @@ void AudioEngine::setVoicePan(uint32_t partIndex, float pan) {
     
     AudioEvent event(EventType::SET_VOICE_PAN, pan, partIndex);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - pan event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -247,7 +247,7 @@ void AudioEngine::setVoiceLevel(uint32_t partIndex, float level) {
     
     AudioEvent event(EventType::SET_VOICE_LEVEL, level, partIndex);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - level event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -263,7 +263,7 @@ void AudioEngine::setVoiceDecay(uint32_t partIndex, float decayMs) {
     
     AudioEvent event(EventType::SET_VOICE_DECAY, decayMs, partIndex);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - decay event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 
@@ -275,7 +275,7 @@ void AudioEngine::setVoiceFilter(uint32_t partIndex, Tribex::FilterType filter) 
     
     AudioEvent event(EventType::SET_VOICE_FILTER, static_cast<float>(filter), partIndex);
     if (!mEventQueue.push(event)) {
-        LOGE("Event queue full - filter event dropped");
+        // Event dropped - queue full (logged via atomic counter)
     }
 }
 

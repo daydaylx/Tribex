@@ -21,6 +21,7 @@ import com.tribex.groovebox.ui.screen.Screen
 import com.tribex.groovebox.ui.screen.PatternScreen
 import com.tribex.groovebox.ui.screen.SoundScreen
 import com.tribex.groovebox.ui.SampleScreen
+import com.tribex.groovebox.ui.screens.SampleBrowserScreen
 import com.tribex.groovebox.ui.components.NavigationBar
 import com.tribex.groovebox.ui.theme.TribexTheme
 import com.tribex.groovebox.engine.PartSampleState
@@ -46,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var projectManager: ProjectManager
-    private lateinit var sampleLoader: SampleAssetLoader
+    lateinit var sampleLoader: SampleAssetLoader  // M9: Internal lateinit for SampleBrowserScreen access
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,11 +194,19 @@ fun MainNavigation() {
             )
         }
     ) { paddingValues ->
-        when (currentScreen) {
-            Screen.PATTERN -> PatternScreen()
-            Screen.SOUND -> SoundScreen()
-            Screen.SAMPLE -> {
-                SampleScreen(
+        Box(modifier = Modifier.padding(paddingValues)) {
+            when (currentScreen) {
+                Screen.PATTERN -> PatternScreen()
+                Screen.SOUND -> SoundScreen()
+                Screen.SAMPLE -> {
+                    // M9: New Sample Browser UI with auto-load capability
+                    val context = LocalContext.current
+                    val activity = context as? MainActivity
+                    if (activity != null) {
+                        SampleBrowserScreen(sampleLoader = activity.sampleLoader)
+                    } else {
+                        // Fallback to old SampleScreen if needed
+                        SampleScreen(
                     parts = parts,
                     onSampleLoaded = { partIndex, result ->
                         val emptyPart = parts.firstOrNull { !it.hasSample }
@@ -269,6 +278,8 @@ fun MainNavigation() {
                     },
                     modifier = Modifier.padding(paddingValues)
                 )
+                    }
+                }
             }
         }
     }
